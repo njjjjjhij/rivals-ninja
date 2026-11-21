@@ -82,6 +82,17 @@ local Config = {
 		hitMarker = true,
 		killNotify = true,
 		targetHud = true,
+		maxDist = 1500,
+		offset = 0,
+		delay = 0,
+		switchDelay = 0,
+		curve = "Exponential",
+		priority = "Crosshair",
+		ignoreKnocked = false,
+		fireDelay = 50,
+		lockLine = false,
+		targetDot = false,
+		stickyPower = 500,
 	},
 	rage = {
 		enabled = false,
@@ -92,18 +103,32 @@ local Config = {
 		team = false,
 		sticky = true,
 		autoFire = false,
+		maxDist = 1500,
+		switchDelay = 0,
+		snap = "Instant",
+		fireRate = 12,
+		autoScope = false,
+		ignoreKnocked = false,
 	},
 	trigger = {
 		enabled = false,
 		range = 150,
 		delay = 80,
 		team = false,
+		fovMode = false,
+		fov = 40,
+		chance = 100,
+		maxDist = 1000,
+		ignoreKnocked = false,
+		burst = 1,
+		wall = true,
 	},
 	skin = {
 		enabled = false,
 		color = "Cyan",
 		material = "Neon",
 		rainbow = false,
+		rainbowSpeed = 0.25,
 	},
 	esp = {
 		enabled = true,
@@ -121,6 +146,17 @@ local Config = {
 		headDot = true,
 		arrows = false,
 		pickups = false,
+		boxStyle = "Box",
+		healthText = false,
+		textSize = 13,
+		opacity = 1,
+		tracerFrom = "Bottom",
+		teamColor = false,
+		chamFill = 0.62,
+		skeletonThickness = 1,
+		arrowSize = 12,
+		headDotSize = 6,
+		nameMode = "DisplayName",
 	},
 	visual = {
 		fullbright = false,
@@ -130,6 +166,18 @@ local Config = {
 		watermark = false,
 		clock = true,
 		playerCount = true,
+		noEffects = false,
+		customTime = false,
+		time = 14,
+		customBrightness = false,
+		brightness = 2,
+		crosshairStyle = "Cross",
+		crosshairGap = 3,
+		crosshairThickness = 1,
+		coords = true,
+		uiScale = 1,
+		uiTransparency = 0.08,
+		iconSize = 50,
 	},
 	move = {
 		speed = false,
@@ -143,6 +191,28 @@ local Config = {
 		noclip = false,
 		fov = false,
 		fovValue = 90,
+		hipHeight = false,
+		hipHeightValue = 2,
+		gravity = false,
+		gravityValue = 196.2,
+		cameraDist = false,
+		cameraDistValue = 20,
+		flyMode = "Camera",
+	},
+	radar = {
+		enabled = false,
+		size = 110,
+		range = 300,
+		opacity = 0.85,
+		names = false,
+		dotSize = 4,
+	},
+	logs = {
+		hitLog = true,
+		killFeed = true,
+		damageNumbers = false,
+		duration = 3,
+		maxLines = 5,
 	},
 }
 
@@ -321,6 +391,9 @@ local Aim = {
 	point = nil,
 	lockPoint = nil,
 	lockCFrame = nil,
+	acquired = nil,
+	lastSwitch = 0,
+	lastAuto = 0,
 	scoped = false,
 	scopeFov = nil,
 	watchHumanoid = nil,
@@ -387,8 +460,9 @@ local function pickTarget(settings, current)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player ~= LocalPlayer and not (settings.team and sameTeam(player)) then
-			local character, _humanoid, root, head = getCharacter(player)
-			if character then
+			local character, humanoid, root, head = getCharacter(player)
+			local knocked = settings.ignoreKnocked and character and isKnocked(player, character, humanoid)
+			if character and not knocked then
 				local part = partFor(character, head, root, settings.part, origin)
 				if part then
 					local screen, onScreen = camera:WorldToViewportPoint(part.Position)
@@ -397,11 +471,18 @@ local function pickTarget(settings, current)
 						local offsetY = screen.Y - center.Y
 						local screenDistance = math.sqrt(offsetX * offsetX + offsetY * offsetY)
 						local worldDistance = (part.Position - origin).Magnitude
-						if screenDistance <= radius and worldDistance <= 1500 then
+						if screenDistance <= radius and worldDistance <= (settings.maxDist or 1500) then
 							if not settings.wall or canSee(player, camera, character, part) then
-								local score = screenDistance + worldDistance * 0.02
+								local score
+								if settings.priority == "Distance" then
+									score = worldDistance
+								elseif settings.priority == "Low HP" then
+									score = humanoid and humanoid.Health or 1000
+								else
+									score = screenDistance + worldDistance * 0.02
+								end
 								if settings.sticky and current and player == current then
-									score = score - radius * 2 - 500
+									score = score - radius - (settings.stickyPower or 500)
 								end
 								if score < bestScore then
 									bestScore = score
@@ -434,9 +515,11 @@ local function aimActive()
 end
 
 local Rage = { player = nil }
-local Trigger = { last = 0 }
+local Trigger = { last = 0, lastBurst = 0, burstLeft = 0 }
 local FX = { hitUntil = 0 }
 local notify = function() end
+local pushLog = function() end
+local clearLog = function() end
 local lastFire = 0
 
 local function fireWeapon()
@@ -601,7 +684,16 @@ local function aimCamera(point, smooth, turn, delta, instant, deadzone)
 	if instant or angle < 0.0006 then
 		direction = desired
 	else
-		local alpha = 1 - math.exp(-math.max(smooth, 0.1) * delta)
+		local rate = math.max(smooth, 0.1)
+		local alpha
+		local curve = Config.aimbot.curve
+		if curve == "Linear" then
+			alpha = math.clamp(rate * delta, 0, 1)
+		elseif curve == "Spring" then
+			alpha = math.clamp((1 - math.exp(-rate * delta)) * 1.6, 0, 1)
+		else
+			alpha = 1 - math.exp(-rate * delta)
+		end
 		local maxStep = math.rad(math.max(turn, 10)) * delta
 		local step = math.min(angle * alpha, maxStep)
 		direction = current:Lerp(desired, math.clamp(step / angle, 0, 1)).Unit
@@ -637,9 +729,18 @@ local function aimStep(delta)
 		return
 	end
 
+	local now = os.clock()
 	if player ~= Aim.player then
+		if Aim.player and (settings.switchDelay or 0) > 0 and now - (Aim.lastSwitch or 0) < settings.switchDelay / 1000 then
+			return
+		end
 		Aim.player = player
 		Aim.point = nil
+		Aim.acquired = now
+		Aim.lastSwitch = now
+	end
+	if (settings.delay or 0) > 0 and Aim.acquired and now - Aim.acquired < settings.delay / 1000 then
+		return
 	end
 	Aim.part = part
 
@@ -654,6 +755,10 @@ local function aimStep(delta)
 			if settings.hitMarker then
 				FX.hitUntil = os.clock() + 0.16
 			end
+			local damage = math.floor((Aim.lastHealth - humanoid.Health) + 0.5)
+			if damage > 0 then
+				pushLog(string.format("hit %s  -%d", player.DisplayName or player.Name, damage), Theme.bad, "hit")
+			end
 			if settings.killNotify and humanoid.Health <= 0 then
 				notify("Eliminated " .. (player.DisplayName or player.Name))
 			end
@@ -661,7 +766,7 @@ local function aimStep(delta)
 		Aim.lastHealth = humanoid.Health
 	end
 
-	local aimPoint = part.Position
+	local aimPoint = part.Position + Vector3.new(0, settings.offset or 0, 0)
 	local velocity = part.AssemblyLinearVelocity
 	if settings.prediction > 0 and velocity then
 		aimPoint = aimPoint + velocity * (settings.prediction / 100)
@@ -696,21 +801,37 @@ local function aimStep(delta)
 		if camera then
 			local toTarget = Aim.point - camera.CFrame.Position
 			if toTarget.Magnitude > 0.1 and camera.CFrame.LookVector:Dot(toTarget.Unit) > 0.99 then
-				fireWeapon()
+				if now - (Aim.lastAuto or 0) >= (settings.fireDelay or 50) / 1000 then
+					Aim.lastAuto = now
+					fireWeapon()
+				end
 			end
 		end
 	end
 end
 
-local function rageStep()
+local function rageStep(delta)
 	local settings = Config.rage
 	if not settings.enabled then
 		Rage.player = nil
+		if not (Config.aimbot.enabled and Config.aimbot.autoScope) then
+			applyScope(false)
+		end
 		return
 	end
+	local now = os.clock()
 	local player, part = pickTarget(settings, Rage.player)
+	if player ~= Rage.player and Rage.player and (settings.switchDelay or 0) > 0 and now - (Rage.lastSwitch or 0) < settings.switchDelay / 1000 then
+		return
+	end
+	if player ~= Rage.player then
+		Rage.lastSwitch = now
+	end
 	Rage.player = player
 	if not player or not part then
+		if not (Config.aimbot.enabled and Config.aimbot.autoScope) then
+			applyScope(false)
+		end
 		beginRelease()
 		return
 	end
@@ -719,10 +840,21 @@ local function rageStep()
 	if settings.prediction > 0 and velocity then
 		point = point + velocity * (settings.prediction / 100)
 	end
-	aimCamera(point, 1, 99999, 0, true, 0)
+	if settings.autoScope then
+		applyScope(true)
+	end
+	if settings.snap == "Smooth" then
+		aimCamera(point, 24, 900, delta or (1 / 60), false, 0)
+	else
+		aimCamera(point, 1, 99999, 0, true, 0)
+	end
 	Aim.lockPoint = point
 	if settings.autoFire then
-		fireWeapon()
+		local rate = 1 / math.max(settings.fireRate or 12, 1)
+		if now - (Rage.lastFire or 0) >= rate then
+			Rage.lastFire = now
+			fireWeapon()
+		end
 	end
 end
 
@@ -770,6 +902,14 @@ local function triggerStep()
 		return
 	end
 	local now = os.clock()
+	if (Trigger.burstLeft or 0) > 0 then
+		if now - (Trigger.lastBurst or 0) >= 0.06 then
+			Trigger.lastBurst = now
+			Trigger.burstLeft = Trigger.burstLeft - 1
+			fireWeapon()
+		end
+		return
+	end
 	if now - Trigger.last < settings.delay / 1000 then
 		return
 	end
@@ -777,28 +917,50 @@ local function triggerStep()
 	if not camera then
 		return
 	end
-	local filter = { camera }
-	if LocalPlayer.Character then
-		filter[#filter + 1] = LocalPlayer.Character
+
+	local target = nil
+	if settings.fovMode then
+		target = pickTarget({
+			fov = settings.fov,
+			part = "Head",
+			wall = settings.wall,
+			team = settings.team,
+			maxDist = settings.maxDist,
+			ignoreKnocked = settings.ignoreKnocked,
+			priority = "Crosshair",
+		}, nil)
+	else
+		local filter = { camera }
+		if LocalPlayer.Character then
+			filter[#filter + 1] = LocalPlayer.Character
+		end
+		triggerParams.FilterDescendantsInstances = filter
+		local hit = workspace:Raycast(camera.CFrame.Position, camera.CFrame.LookVector * settings.range, triggerParams)
+		if hit and hit.Instance then
+			target = playerFromPart(hit.Instance)
+		end
 	end
-	triggerParams.FilterDescendantsInstances = filter
-	local hit = workspace:Raycast(camera.CFrame.Position, camera.CFrame.LookVector * settings.range, triggerParams)
-	if not hit or not hit.Instance then
+
+	if not target or target == LocalPlayer then
 		return
 	end
-	local player = playerFromPart(hit.Instance)
-	if not player or player == LocalPlayer then
+	if settings.team and sameTeam(target) then
 		return
 	end
-	if settings.team and sameTeam(player) then
-		return
-	end
-	local character = player.Character
+	local character = target.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 then
 		return
 	end
+	if settings.ignoreKnocked and isKnocked(target, character, humanoid) then
+		return
+	end
+	if math.random() * 100 > (settings.chance or 100) then
+		return
+	end
 	Trigger.last = now
+	Trigger.lastBurst = now
+	Trigger.burstLeft = math.max((settings.burst or 1) - 1, 0)
 	fireWeapon()
 end
 
@@ -818,8 +980,10 @@ local function newEspEntry()
 		distance = newDrawing("Text"),
 		tracer = newDrawing("Line"),
 		headDot = newDrawing("Square"),
+		healthText = newDrawing("Text"),
 		arrow = newDrawing("Triangle"),
 		skeleton = {},
+		corner = {},
 	}
 	return entry
 end
@@ -829,6 +993,10 @@ local function releaseEspEntry(entry)
 		removeDrawing(line)
 	end
 	entry.skeleton = {}
+	for _, line in ipairs(entry.corner or {}) do
+		removeDrawing(line)
+	end
+	entry.corner = {}
 	for _, object in pairs(entry) do
 		removeDrawing(object)
 	end
@@ -842,7 +1010,7 @@ local function setCham(character)
 	highlight.Name = "HilixHighlight"
 	highlight.Adornee = character
 	highlight.FillColor = Theme.accent
-	highlight.FillTransparency = 0.62
+	highlight.FillTransparency = Config.esp.chamFill or 0.62
 	highlight.OutlineColor = Theme.accent
 	highlight.OutlineTransparency = 0.1
 	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
@@ -943,9 +1111,11 @@ local function updateEsp()
 						local tipY = size.Y * 0.5 + uy * reach
 						local arrow = entry.arrow
 						if arrow then
+							local tip = math.max(settings.arrowSize or 12, 6)
+							local half = tip * 0.6
 							arrow.PointA = Vector2.new(tipX, tipY)
-							arrow.PointB = Vector2.new(tipX - ux * px(16) - uy * px(10), tipY - uy * px(16) + ux * px(10))
-							arrow.PointC = Vector2.new(tipX - ux * px(16) + uy * px(10), tipY - uy * px(16) - ux * px(10))
+							arrow.PointB = Vector2.new(tipX - ux * px(tip) - uy * px(half), tipY - uy * px(tip) + ux * px(half))
+							arrow.PointC = Vector2.new(tipX - ux * px(tip) + uy * px(half), tipY - uy * px(tip) - ux * px(half))
 							arrow.Color = Theme.accent
 							arrow.Thickness = 1
 							arrow.Filled = true
@@ -990,15 +1160,46 @@ local function updateEsp()
 					local left = centerX - width * 0.5
 					local fade = math.clamp(1 - (distance / math.max(settings.maxDist, 1)) * 0.5, 0.45, 1)
 					local transparency = 1 - fade * 0.88
+					transparency = 1 - (1 - transparency) * (settings.opacity or 1)
+					local color = Theme.accent
+					if settings.teamColor and player.TeamColor then
+						color = player.TeamColor.Color
+					end
 
-					if settings.box then
-						setSquare(entry.box, Vector2.new(left, topY), Vector2.new(width, height), Theme.accent, 1, transparency, false)
+					if settings.box and settings.boxStyle ~= "Corners" then
+						setSquare(entry.box, Vector2.new(left, topY), Vector2.new(width, height), color, 1, transparency, false)
 					else
 						hideDrawing(entry.box)
 					end
 
+					if settings.box and settings.boxStyle == "Corners" then
+						local reach = math.min(width, height) * 0.22
+						local points = {
+							{ left, topY, left + reach, topY },
+							{ left, topY, left, topY + reach },
+							{ left + width, topY, left + width - reach, topY },
+							{ left + width, topY, left + width, topY + reach },
+							{ left, bottomY, left + reach, bottomY },
+							{ left, bottomY, left, bottomY - reach },
+							{ left + width, bottomY, left + width - reach, bottomY },
+							{ left + width, bottomY, left + width, bottomY - reach },
+						}
+						for index, point in ipairs(points) do
+							local line = entry.corner[index]
+							if not line then
+								line = newDrawing("Line")
+								entry.corner[index] = line
+							end
+							setLine(line, Vector2.new(point[1], point[2]), Vector2.new(point[3], point[4]), color, 1, transparency)
+						end
+					else
+						for _, line in ipairs(entry.corner) do
+							hideDrawing(line)
+						end
+					end
+
 					if settings.fill then
-						setSquare(entry.fill, Vector2.new(left + 1, topY + 1), Vector2.new(math.max(width - 2, 1), math.max(height - 2, 1)), Theme.accent, 1, 0.86, true)
+						setSquare(entry.fill, Vector2.new(left + 1, topY + 1), Vector2.new(math.max(width - 2, 1), math.max(height - 2, 1)), color, 1, 0.86, true)
 					else
 						hideDrawing(entry.fill)
 					end
@@ -1014,22 +1215,35 @@ local function updateEsp()
 						hideDrawing(entry.health)
 					end
 
+					if settings.healthText and humanoid then
+						setText(entry.healthText, tostring(math.floor(humanoid.Health + 0.5)), Vector2.new(left - px(11), topY + height * 0.5), Theme.text, px(9))
+					else
+						hideDrawing(entry.healthText)
+					end
+
 					if settings.name then
-						setText(entry.name, player.DisplayName or player.Name, Vector2.new(centerX, topY - px(17)), Theme.text, px(14))
+						local label = player.DisplayName or player.Name
+						if settings.nameMode == "Name" then
+							label = player.Name
+						elseif settings.nameMode == "Both" then
+							label = (player.DisplayName or player.Name) .. " (" .. player.Name .. ")"
+						end
+						setText(entry.name, label, Vector2.new(centerX, topY - px(17)), Theme.text, px(settings.textSize or 13))
 					else
 						hideDrawing(entry.name)
 					end
 
 					if settings.distance then
-						setText(entry.distance, string.format("%d m", math.floor(distance + 0.5)), Vector2.new(centerX, bottomY + px(2)), Theme.accent, px(13))
+						setText(entry.distance, string.format("%d m", math.floor(distance + 0.5)), Vector2.new(centerX, bottomY + px(2)), color, px(math.max((settings.textSize or 13) - 2, 8)))
 					else
 						hideDrawing(entry.distance)
 					end
 
 					if settings.tracer and entry.tracer then
-						entry.tracer.From = Vector2.new(size.X * 0.5, size.Y)
+						local fromY = settings.tracerFrom == "Center" and size.Y * 0.5 or size.Y
+						entry.tracer.From = Vector2.new(size.X * 0.5, fromY)
 						entry.tracer.To = Vector2.new(centerX, bottomY)
-						entry.tracer.Color = Theme.accent
+						entry.tracer.Color = color
 						entry.tracer.Thickness = 1
 						entry.tracer.Transparency = 0.55
 						entry.tracer.Visible = true
@@ -1051,7 +1265,7 @@ local function updateEsp()
 								local pointA, onA = camera:WorldToViewportPoint(jointA.Position)
 								local pointB, onB = camera:WorldToViewportPoint(jointB.Position)
 								if onA and onB and pointA.Z > 0 and pointB.Z > 0 then
-									setLine(line, Vector2.new(pointA.X, pointA.Y), Vector2.new(pointB.X, pointB.Y), Theme.text, 1, math.max(transparency - 0.12, 0.05))
+									setLine(line, Vector2.new(pointA.X, pointA.Y), Vector2.new(pointB.X, pointB.Y), Theme.text, math.max(settings.skeletonThickness or 1, 1), math.max(transparency - 0.12, 0.05))
 								else
 									hideDrawing(line)
 								end
@@ -1068,7 +1282,8 @@ local function updateEsp()
 					if settings.headDot then
 						local headPoint, headOn = camera:WorldToViewportPoint(head.Position)
 						if headOn and headPoint.Z > 0 then
-							setSquare(entry.headDot, Vector2.new(headPoint.X - px(3), headPoint.Y - px(3)), Vector2.new(px(6), px(6)), Theme.bad, 1, 0.15, true)
+							local dot = math.max(settings.headDotSize or 6, 2)
+							setSquare(entry.headDot, Vector2.new(headPoint.X - px(dot * 0.5), headPoint.Y - px(dot * 0.5)), Vector2.new(px(dot), px(dot)), Theme.bad, 1, 0.15, true)
 						else
 							hideDrawing(entry.headDot)
 						end
@@ -1167,7 +1382,7 @@ local function skinRefresh()
 
 	local color
 	if Config.skin.rainbow then
-		color = Color3.fromHSV((os.clock() * 0.25) % 1, 0.85, 1)
+		color = Color3.fromHSV((os.clock() * (Config.skin.rainbowSpeed or 0.25)) % 1, 0.85, 1)
 	else
 		color = SKIN_COLORS[Config.skin.color] or SKIN_COLORS.Cyan
 	end
@@ -1280,7 +1495,7 @@ end
 -- World visuals
 --------------------------------------------------------------------------
 
-local World = { saved = nil, fog = nil }
+local World = { saved = nil, fog = nil, effects = nil, clock = 0 }
 
 local function updateWorldVisuals()
 	local lighting = nil
@@ -1324,6 +1539,31 @@ local function updateWorldVisuals()
 		lighting.FogEnd = World.fog.finish or 1000000
 		World.fog = nil
 	end
+
+	if settings.customBrightness then
+		lighting.Brightness = settings.brightness
+	end
+	if settings.customTime then
+		lighting.ClockTime = settings.time
+	end
+
+	if settings.noEffects then
+		if not World.effects then
+			World.effects = true
+			for _, object in ipairs(lighting:GetChildren()) do
+				if object:IsA("ColorCorrectionEffect") or object:IsA("BlurEffect") or object:IsA("SunRaysEffect") or object:IsA("DepthOfFieldEffect") then
+					object.Enabled = false
+				end
+			end
+		end
+	elseif World.effects then
+		for _, object in ipairs(lighting:GetChildren()) do
+			if object:IsA("ColorCorrectionEffect") or object:IsA("BlurEffect") or object:IsA("SunRaysEffect") or object:IsA("DepthOfFieldEffect") then
+				object.Enabled = true
+			end
+		end
+		World.effects = nil
+	end
 end
 
 --------------------------------------------------------------------------
@@ -1342,6 +1582,12 @@ local Move = {
 	baseFov = nil,
 	fovApplied = false,
 	jumpConnection = nil,
+	hipApplied = false,
+	baseHip = nil,
+	gravityApplied = false,
+	baseGravity = nil,
+	camApplied = false,
+	baseCamMax = nil,
 }
 
 local function currentHumanoid()
@@ -1443,6 +1689,40 @@ local function updateMovement(delta)
 		end)
 	end
 
+	if settings.hipHeight then
+		if not Move.hipApplied then
+			Move.baseHip = humanoid.HipHeight
+			Move.hipApplied = true
+		end
+		humanoid.HipHeight = settings.hipHeightValue
+	elseif Move.hipApplied then
+		humanoid.HipHeight = Move.baseHip or 2
+		Move.hipApplied = false
+	end
+
+	if settings.gravity then
+		if not Move.gravityApplied then
+			Move.baseGravity = workspace.Gravity
+			Move.gravityApplied = true
+		end
+		workspace.Gravity = settings.gravityValue
+	elseif Move.gravityApplied then
+		workspace.Gravity = Move.baseGravity or 196.2
+		Move.gravityApplied = false
+	end
+
+	if settings.cameraDist then
+		if not Move.camApplied then
+			Move.baseCamMax = LocalPlayer.CameraMaxZoomDistance
+			Move.camApplied = true
+		end
+		LocalPlayer.CameraMaxZoomDistance = settings.cameraDistValue
+		LocalPlayer.CameraMinZoomDistance = math.min(settings.cameraDistValue, 12)
+	elseif Move.camApplied then
+		LocalPlayer.CameraMaxZoomDistance = Move.baseCamMax or 128
+		Move.camApplied = false
+	end
+
 	if settings.fly then
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root then
@@ -1460,7 +1740,14 @@ local function updateMovement(delta)
 			end
 			local camera = workspace.CurrentCamera
 			local look = camera and camera.CFrame.LookVector or Vector3.new(0, 0, -1)
-			local velocity = look * settings.flySpeed
+			local direction = look
+			if settings.flyMode == "Horizontal" then
+				local flat = Vector3.new(look.X, 0, look.Z)
+				if flat.Magnitude > 0.01 then
+					direction = flat.Unit
+				end
+			end
+			local velocity = direction * settings.flySpeed
 			local up, down = false, false
 			pcall(function()
 				up = UserInputService:IsKeyDown(Enum.KeyCode.Space)
@@ -1512,6 +1799,9 @@ local function shutdownMovement()
 	Config.move.fly = false
 	Config.move.noclip = false
 	Config.move.fov = false
+	Config.move.hipHeight = false
+	Config.move.gravity = false
+	Config.move.cameraDist = false
 	stopFly()
 	restoreNoclip()
 	local humanoid = Move.humanoid
@@ -1531,9 +1821,29 @@ local function shutdownMovement()
 	if camera and Move.fovApplied then
 		camera.FieldOfView = Move.baseFov or 70
 	end
+	if Move.humanoid then
+		if Move.hipApplied then
+			pcall(function()
+				Move.humanoid.HipHeight = Move.baseHip or 2
+			end)
+		end
+	end
+	if Move.gravityApplied then
+		pcall(function()
+			workspace.Gravity = Move.baseGravity or 196.2
+		end)
+	end
+	if Move.camApplied then
+		pcall(function()
+			LocalPlayer.CameraMaxZoomDistance = Move.baseCamMax or 128
+		end)
+	end
 	Move.speedApplied = false
 	Move.jumpApplied = false
 	Move.fovApplied = false
+	Move.hipApplied = false
+	Move.gravityApplied = false
+	Move.camApplied = false
 	applyScope(false)
 	if Move.jumpConnection then
 		pcall(function()
@@ -1547,7 +1857,7 @@ end
 -- Crosshair, hit marker and target HUD
 --------------------------------------------------------------------------
 
-local Cross = { lines = {}, dot = nil }
+local Cross = { lines = {}, dot = nil, circle = nil }
 
 local function updateCrosshair()
 	if not DRAW_OK then
@@ -1557,7 +1867,8 @@ local function updateCrosshair()
 		for index = 1, 4 do
 			Cross.lines[index] = newDrawing("Line")
 		end
-		Cross.dot = newDrawing("Square")
+				Cross.dot = newDrawing("Square")
+		Cross.circle = newDrawing("Circle")
 	end
 	local camera = workspace.CurrentCamera
 	if not camera or not Config.visual.crosshair then
@@ -1565,17 +1876,44 @@ local function updateCrosshair()
 			hideDrawing(line)
 		end
 		hideDrawing(Cross.dot)
+		hideDrawing(Cross.circle)
 		return
 	end
 	local size = camera.ViewportSize
+
 	local cx, cy = size.X * 0.5, size.Y * 0.5
-	local gap = px(3)
+	local gap = px(Config.visual.crosshairGap or 3)
 	local length = px(Config.visual.crosshairSize)
-	setLine(Cross.lines[1], Vector2.new(cx - gap - length, cy), Vector2.new(cx - gap, cy), Theme.accent, 1, 0.15)
-	setLine(Cross.lines[2], Vector2.new(cx + gap, cy), Vector2.new(cx + gap + length, cy), Theme.accent, 1, 0.15)
-	setLine(Cross.lines[3], Vector2.new(cx, cy - gap - length), Vector2.new(cx, cy - gap), Theme.accent, 1, 0.15)
-	setLine(Cross.lines[4], Vector2.new(cx, cy + gap), Vector2.new(cx, cy + gap + length), Theme.accent, 1, 0.15)
-	setSquare(Cross.dot, Vector2.new(cx - 1, cy - 1), Vector2.new(2, 2), Theme.accent, 1, 0.1, true)
+	local thickness = math.max(Config.visual.crosshairThickness or 1, 1)
+	local style = Config.visual.crosshairStyle or "Cross"
+
+	if style == "Cross" then
+		setLine(Cross.lines[1], Vector2.new(cx - gap - length, cy), Vector2.new(cx - gap, cy), Theme.accent, thickness, 0.15)
+		setLine(Cross.lines[2], Vector2.new(cx + gap, cy), Vector2.new(cx + gap + length, cy), Theme.accent, thickness, 0.15)
+		setLine(Cross.lines[3], Vector2.new(cx, cy - gap - length), Vector2.new(cx, cy - gap), Theme.accent, thickness, 0.15)
+		setLine(Cross.lines[4], Vector2.new(cx, cy + gap), Vector2.new(cx, cy + gap + length), Theme.accent, thickness, 0.15)
+		setSquare(Cross.dot, Vector2.new(cx - 1, cy - 1), Vector2.new(2, 2), Theme.accent, 1, 0.1, true)
+		hideDrawing(Cross.circle)
+	elseif style == "Dot" then
+		for _, line in ipairs(Cross.lines) do
+			hideDrawing(line)
+		end
+		hideDrawing(Cross.circle)
+		setSquare(Cross.dot, Vector2.new(cx - px(2), cy - px(2)), Vector2.new(px(4), px(4)), Theme.accent, 1, 0.1, true)
+	else
+		for _, line in ipairs(Cross.lines) do
+			hideDrawing(line)
+		end
+		hideDrawing(Cross.dot)
+		Cross.circle.Position = Vector2.new(cx, cy)
+		Cross.circle.Radius = px(Config.visual.crosshairSize)
+		Cross.circle.Color = Theme.accent
+		Cross.circle.Thickness = thickness
+		Cross.circle.Transparency = 0.2
+		Cross.circle.NumSides = 48
+		Cross.circle.Filled = false
+		Cross.circle.Visible = true
+	end
 end
 
 local HitMark = { lines = {} }
@@ -1648,6 +1986,7 @@ local UI = {
 	pages = {},
 	navButtons = {},
 	tabButtons = {},
+	tweaks = { iconSize = function() end },
 	current = "main",
 }
 
@@ -1789,6 +2128,7 @@ create("UIStroke", {
 	Thickness = 1,
 	Transparency = 0.15,
 }, panel)
+local panelScale = create("UIScale", { Scale = 1 }, panel)
 
 local headerHeight = 26
 local header = create("Frame", {
@@ -1845,9 +2185,9 @@ local function showPage(name)
 end
 
 local tabNames = {
-	{ "rage", "aim" },
+	{ "rage", "rage" },
 	{ "visuals", "esp" },
-	{ "misc", "misc" },
+	{ "misc", "movement" },
 	{ "skins", "skins" },
 	{ "settings", "config" },
 }
@@ -1947,21 +2287,26 @@ end
 local navItems = {
 	{ "main", "main" },
 	{ "aim", "aim" },
+	{ "rage", "rage" },
+	{ "trigger", "trigger" },
 	{ "esp", "esp" },
-	{ "misc", "misc" },
+	{ "visuals", "visuals" },
+	{ "move", "movement" },
 	{ "skins", "skins" },
-	{ "configs", "config" },
+	{ "radar", "radar" },
+	{ "logs", "logs" },
+	{ "config", "config" },
 }
 for index, entry in ipairs(navItems) do
 	local label, pageName = entry[1], entry[2]
 	local button = create("TextButton", {
 		AutoButtonColor = false,
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, px(24)),
+		Size = UDim2.new(1, 0, 0, px(20)),
 		LayoutOrder = index,
 		Font = Enum.Font.GothamMedium,
 		Text = "  " .. label,
-		TextSize = px(10),
+		TextSize = px(9),
 		TextColor3 = HX.dim,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}, sidebar)
@@ -2296,15 +2641,20 @@ local function unloadClient()
 	end
 end
 
---------------------------------------------------------------------------
 -- Pages
+do
 --------------------------------------------------------------------------
 
 local mainPage = makePage("main")
 local aimPage = makePage("aim")
+local ragePage = makePage("rage")
+local triggerPage = makePage("trigger")
 local espPage = makePage("esp")
-local miscPage = makePage("misc")
+local visualsPage = makePage("visuals")
+local movementPage = makePage("movement")
 local skinsPage = makePage("skins")
+local radarPage = makePage("radar")
+local logsPage = makePage("logs")
 local configPage = makePage("config")
 
 -- Main ----------------------------------------------------------------
@@ -2335,13 +2685,20 @@ addCheck(quickRows, "esp", function()
 end, function(value)
 	Config.esp.enabled = value
 end)
+addCheck(quickRows, "radar", function()
+	return Config.radar.enabled
+end, function(value)
+	Config.radar.enabled = value
+end)
 addCheck(quickRows, "skin unlocker", function()
 	return Config.skin.enabled
 end, function(value)
 	Config.skin.enabled = value
 	Skin.dirty = true
 end)
-addCheck(quickRows, "fly", function()
+
+local quickMove = addSection(mainCols[2], "movement")
+addCheck(quickMove, "fly", function()
 	return Config.move.fly
 end, function(value)
 	Config.move.fly = value
@@ -2349,7 +2706,7 @@ end, function(value)
 		stopFly()
 	end
 end)
-addCheck(quickRows, "noclip", function()
+addCheck(quickMove, "noclip", function()
 	return Config.move.noclip
 end, function(value)
 	Config.move.noclip = value
@@ -2357,98 +2714,47 @@ end, function(value)
 		restoreNoclip()
 	end
 end)
-addCheck(quickRows, "walk speed", function()
+addCheck(quickMove, "walk speed", function()
 	return Config.move.speed
 end, function(value)
 	Config.move.speed = value
 end)
-
-local rageRows = addSection(mainCols[2], "rage")
-addCheck(rageRows, "enabled", function()
-	return Config.rage.enabled
+addCheck(quickMove, "infinite jump", function()
+	return Config.move.infiniteJump
 end, function(value)
-	Config.rage.enabled = value
-	if not value then
-		Rage.player = nil
-	end
+	Config.move.infiniteJump = value
 end)
-addSlider(rageRows, "fov", 10, 180, 1, function()
-	return Config.rage.fov
+addCheck(quickMove, "fullbright", function()
+	return Config.visual.fullbright
 end, function(value)
-	Config.rage.fov = value
-end, " deg", 0)
-addSelect(rageRows, "target", { "Head", "Body", "Nearest" }, function()
-	return Config.rage.part
-end, function(value)
-	Config.rage.part = value
+	Config.visual.fullbright = value
 end)
-addSlider(rageRows, "prediction", 0, 25, 1, function()
-	return Config.rage.prediction
+addCheck(quickMove, "custom crosshair", function()
+	return Config.visual.crosshair
 end, function(value)
-	Config.rage.prediction = value
-end, "%", 0)
-addCheck(rageRows, "wall check", function()
-	return Config.rage.wall
-end, function(value)
-	Config.rage.wall = value
-end)
-addCheck(rageRows, "team check", function()
-	return Config.rage.team
-end, function(value)
-	Config.rage.team = value
-end)
-addCheck(rageRows, "sticky", function()
-	return Config.rage.sticky
-end, function(value)
-	Config.rage.sticky = value
-end)
-addCheck(rageRows, "auto fire", function()
-	return Config.rage.autoFire
-end, function(value)
-	Config.rage.autoFire = value
+	Config.visual.crosshair = value
 end)
 
-local targetRows = addSection(mainCols[3], "targeting & priority")
-addSelect(targetRows, "mode", { "Always", "Hold RMB", "Hold Q" }, function()
-	return Config.aimbot.mode
-end, function(value)
-	Config.aimbot.mode = value
-end)
-addSelect(targetRows, "target", { "Head", "Body", "Nearest" }, function()
-	return Config.aimbot.part
-end, function(value)
-	Config.aimbot.part = value
-end)
-addCheck(targetRows, "wall check", function()
-	return Config.aimbot.wall
-end, function(value)
-	Config.aimbot.wall = value
-	Aim.cache = {}
-end)
-addCheck(targetRows, "team check", function()
-	return Config.aimbot.team
-end, function(value)
-	Config.aimbot.team = value
-end)
-addCheck(targetRows, "sticky", function()
-	return Config.aimbot.sticky
-end, function(value)
-	Config.aimbot.sticky = value
-end)
-addCheck(targetRows, "instant lock", function()
-	return Config.aimbot.instant
-end, function(value)
-	Config.aimbot.instant = value
-end)
-addCheck(targetRows, "1st person", function()
-	return Config.aimbot.firstPerson
-end, function(value)
-	Config.aimbot.firstPerson = value
-end)
-addCheck(targetRows, "auto fire", function()
-	return Config.aimbot.autoFire
-end, function(value)
-	Config.aimbot.autoFire = value
+local status = addSection(mainCols[3], "modules")
+addInfo(status, "aim / rage / trigger")
+addInfo(status, "esp / radar / logs")
+addInfo(status, "movement / visuals")
+addInfo(status, "skins / config")
+addInfo(status, "tap a tab or nav icon")
+addInfo(status, "x closes - H reopens")
+addAction(status, "panic: disable all", function()
+	Config.aimbot.enabled = false
+	Config.rage.enabled = false
+	Config.trigger.enabled = false
+	Config.esp.enabled = false
+	Config.radar.enabled = false
+	Config.move.fly = false
+	Config.move.noclip = false
+	stopFly()
+	restoreNoclip()
+	clearChams()
+	UI.sync()
+	toast("all modules disabled")
 end)
 
 -- Aim -----------------------------------------------------------------
@@ -2461,7 +2767,7 @@ addCheck(aimRows, "enabled", function()
 end, function(value)
 	Config.aimbot.enabled = value
 end)
-addSlider(aimRows, "fov", 10, 180, 1, function()
+addSlider(aimRows, "fov", 10, 360, 5, function()
 	return Config.aimbot.fov
 end, function(value)
 	Config.aimbot.fov = value
@@ -2491,17 +2797,92 @@ addSlider(aimRows, "deadzone", 0, 20, 1, function()
 end, function(value)
 	Config.aimbot.deadzone = value
 end, " px", 0)
+addSelect(aimRows, "curve", { "Exponential", "Linear", "Spring" }, function()
+	return Config.aimbot.curve
+end, function(value)
+	Config.aimbot.curve = value
+end)
+addSelect(aimRows, "priority", { "Crosshair", "Distance", "Low HP" }, function()
+	return Config.aimbot.priority
+end, function(value)
+	Config.aimbot.priority = value
+end)
 addSelect(aimRows, "target part", { "Head", "Body", "Nearest" }, function()
 	return Config.aimbot.part
 end, function(value)
 	Config.aimbot.part = value
 end)
-addCheck(aimRows, "auto fire", function()
+addSlider(aimRows, "sticky strength", 0, 2000, 50, function()
+	return Config.aimbot.stickyPower
+end, function(value)
+	Config.aimbot.stickyPower = value
+end, "", 0)
+
+local aimTarget = addSection(aimCols[2], "targeting")
+addSelect(aimTarget, "mode", { "Always", "Hold RMB", "Hold Q" }, function()
+	return Config.aimbot.mode
+end, function(value)
+	Config.aimbot.mode = value
+end)
+addCheck(aimTarget, "sticky aim", function()
+	return Config.aimbot.sticky
+end, function(value)
+	Config.aimbot.sticky = value
+end)
+addCheck(aimTarget, "wall check", function()
+	return Config.aimbot.wall
+end, function(value)
+	Config.aimbot.wall = value
+	Aim.cache = {}
+end)
+addCheck(aimTarget, "team check", function()
+	return Config.aimbot.team
+end, function(value)
+	Config.aimbot.team = value
+end)
+addCheck(aimTarget, "ignore knocked", function()
+	return Config.aimbot.ignoreKnocked
+end, function(value)
+	Config.aimbot.ignoreKnocked = value
+end)
+addSlider(aimTarget, "max distance", 50, 2000, 25, function()
+	return Config.aimbot.maxDist
+end, function(value)
+	Config.aimbot.maxDist = value
+end, " m", 0)
+addSlider(aimTarget, "aim height", -2, 4, 0.5, function()
+	return Config.aimbot.offset
+end, function(value)
+	Config.aimbot.offset = value
+end, " st", 1)
+addSlider(aimTarget, "lock delay", 0, 500, 10, function()
+	return Config.aimbot.delay
+end, function(value)
+	Config.aimbot.delay = value
+end, " ms", 0)
+addSlider(aimTarget, "switch delay", 0, 1000, 25, function()
+	return Config.aimbot.switchDelay
+end, function(value)
+	Config.aimbot.switchDelay = value
+end, " ms", 0)
+addCheck(aimTarget, "1st person", function()
+	return Config.aimbot.firstPerson
+end, function(value)
+	Config.aimbot.firstPerson = value
+end)
+
+local aimFire = addSection(aimCols[3], "fire & visuals")
+addCheck(aimFire, "auto fire", function()
 	return Config.aimbot.autoFire
 end, function(value)
 	Config.aimbot.autoFire = value
 end)
-addCheck(aimRows, "auto scope", function()
+addSlider(aimFire, "fire delay", 20, 400, 10, function()
+	return Config.aimbot.fireDelay
+end, function(value)
+	Config.aimbot.fireDelay = value
+end, " ms", 0)
+addCheck(aimFire, "auto scope", function()
 	return Config.aimbot.autoScope
 end, function(value)
 	Config.aimbot.autoScope = value
@@ -2509,29 +2890,48 @@ end, function(value)
 		applyScope(false)
 	end
 end)
-addCheck(aimRows, "hit marker", function()
-	return Config.aimbot.hitMarker
+addCheck(aimFire, "instant lock", function()
+	return Config.aimbot.instant
 end, function(value)
-	Config.aimbot.hitMarker = value
+	Config.aimbot.instant = value
 end)
-addCheck(aimRows, "kill notify", function()
-	return Config.aimbot.killNotify
-end, function(value)
-	Config.aimbot.killNotify = value
-end)
-addCheck(aimRows, "target hud", function()
-	return Config.aimbot.targetHud
-end, function(value)
-	Config.aimbot.targetHud = value
-end)
-addCheck(aimRows, "fov circle", function()
+addCheck(aimFire, "fov circle", function()
 	return Config.aimbot.showFov
 end, function(value)
 	Config.aimbot.showFov = value
 end)
+addCheck(aimFire, "lock line", function()
+	return Config.aimbot.lockLine
+end, function(value)
+	Config.aimbot.lockLine = value
+end)
+addCheck(aimFire, "target dot", function()
+	return Config.aimbot.targetDot
+end, function(value)
+	Config.aimbot.targetDot = value
+end)
+addCheck(aimFire, "hit marker", function()
+	return Config.aimbot.hitMarker
+end, function(value)
+	Config.aimbot.hitMarker = value
+end)
+addCheck(aimFire, "kill notify", function()
+	return Config.aimbot.killNotify
+end, function(value)
+	Config.aimbot.killNotify = value
+end)
+addCheck(aimFire, "target hud", function()
+	return Config.aimbot.targetHud
+end, function(value)
+	Config.aimbot.targetHud = value
+end)
 
-local aimRage = addSection(aimCols[2], "ragebot")
-addCheck(aimRage, "enabled", function()
+-- Rage -----------------------------------------------------------------
+
+local rageCols = pageColumns(ragePage, 3)
+
+local rageRows = addSection(rageCols[1], "ragebot")
+addCheck(rageRows, "enabled", function()
 	return Config.rage.enabled
 end, function(value)
 	Config.rage.enabled = value
@@ -2539,69 +2939,149 @@ end, function(value)
 		Rage.player = nil
 	end
 end)
-addSlider(aimRage, "fov", 10, 180, 1, function()
+addSlider(rageRows, "fov", 10, 360, 5, function()
 	return Config.rage.fov
 end, function(value)
 	Config.rage.fov = value
 end, " deg", 0)
-addSelect(aimRage, "target", { "Head", "Body", "Nearest" }, function()
+addSelect(rageRows, "target", { "Head", "Body", "Nearest" }, function()
 	return Config.rage.part
 end, function(value)
 	Config.rage.part = value
 end)
-addSlider(aimRage, "prediction", 0, 25, 1, function()
+addSlider(rageRows, "prediction", 0, 25, 1, function()
 	return Config.rage.prediction
 end, function(value)
 	Config.rage.prediction = value
 end, "%", 0)
-addCheck(aimRage, "wall check", function()
+addSlider(rageRows, "max distance", 50, 2000, 25, function()
+	return Config.rage.maxDist
+end, function(value)
+	Config.rage.maxDist = value
+end, " m", 0)
+
+local rageFilter = addSection(rageCols[2], "filters")
+addCheck(rageFilter, "wall check", function()
 	return Config.rage.wall
 end, function(value)
 	Config.rage.wall = value
 end)
-addCheck(aimRage, "team check", function()
+addCheck(rageFilter, "team check", function()
 	return Config.rage.team
 end, function(value)
 	Config.rage.team = value
 end)
-addCheck(aimRage, "sticky", function()
+addCheck(rageFilter, "ignore knocked", function()
+	return Config.rage.ignoreKnocked
+end, function(value)
+	Config.rage.ignoreKnocked = value
+end)
+addCheck(rageFilter, "sticky", function()
 	return Config.rage.sticky
 end, function(value)
 	Config.rage.sticky = value
 end)
-addCheck(aimRage, "auto fire", function()
+addSlider(rageFilter, "switch delay", 0, 1000, 25, function()
+	return Config.rage.switchDelay
+end, function(value)
+	Config.rage.switchDelay = value
+end, " ms", 0)
+addSelect(rageFilter, "snap", { "Instant", "Smooth" }, function()
+	return Config.rage.snap
+end, function(value)
+	Config.rage.snap = value
+end)
+
+local rageFire = addSection(rageCols[3], "fire")
+addCheck(rageFire, "auto fire", function()
 	return Config.rage.autoFire
 end, function(value)
 	Config.rage.autoFire = value
 end)
+addSlider(rageFire, "fire rate", 1, 30, 1, function()
+	return Config.rage.fireRate
+end, function(value)
+	Config.rage.fireRate = value
+end, " /s", 0)
+addCheck(rageFire, "auto scope", function()
+	return Config.rage.autoScope
+end, function(value)
+	Config.rage.autoScope = value
+	if not value then
+		applyScope(false)
+	end
+end)
+addInfo(rageFire, "large fov + sticky")
+addInfo(rageFire, "snap instant for flick")
 
-local aimTrigger = addSection(aimCols[3], "triggerbot")
-addCheck(aimTrigger, "enabled", function()
+-- Trigger --------------------------------------------------------------
+
+local trigCols = pageColumns(triggerPage, 2)
+
+local trigRows = addSection(trigCols[1], "triggerbot")
+addCheck(trigRows, "enabled", function()
 	return Config.trigger.enabled
 end, function(value)
 	Config.trigger.enabled = value
 end)
-addSlider(aimTrigger, "range", 20, 1000, 10, function()
+addCheck(trigRows, "fov mode", function()
+	return Config.trigger.fovMode
+end, function(value)
+	Config.trigger.fovMode = value
+end)
+addSlider(trigRows, "fov", 5, 360, 5, function()
+	return Config.trigger.fov
+end, function(value)
+	Config.trigger.fov = value
+end, " deg", 0)
+addSlider(trigRows, "range", 20, 1000, 10, function()
 	return Config.trigger.range
 end, function(value)
 	Config.trigger.range = value
 end, " m", 0)
-addSlider(aimTrigger, "delay", 0, 500, 10, function()
+addSlider(trigRows, "max distance", 50, 2000, 25, function()
+	return Config.trigger.maxDist
+end, function(value)
+	Config.trigger.maxDist = value
+end, " m", 0)
+
+local trigOpts = addSection(trigCols[2], "timing & filters")
+addSlider(trigOpts, "delay", 0, 500, 10, function()
 	return Config.trigger.delay
 end, function(value)
 	Config.trigger.delay = value
 end, " ms", 0)
-addCheck(aimTrigger, "team check", function()
+addSlider(trigOpts, "hit chance", 10, 100, 5, function()
+	return Config.trigger.chance
+end, function(value)
+	Config.trigger.chance = value
+end, "%", 0)
+addSlider(trigOpts, "burst", 1, 6, 1, function()
+	return Config.trigger.burst
+end, function(value)
+	Config.trigger.burst = value
+end, "", 0)
+addCheck(trigOpts, "wall check", function()
+	return Config.trigger.wall
+end, function(value)
+	Config.trigger.wall = value
+end)
+addCheck(trigOpts, "team check", function()
 	return Config.trigger.team
 end, function(value)
 	Config.trigger.team = value
+end)
+addCheck(trigOpts, "ignore knocked", function()
+	return Config.trigger.ignoreKnocked
+end, function(value)
+	Config.trigger.ignoreKnocked = value
 end)
 
 -- ESP -----------------------------------------------------------------
 
 local espCols = pageColumns(espPage, 3)
 
-local visuals = addSection(espCols[1], "visuals")
+local visuals = addSection(espCols[1], "esp visuals")
 addCheck(visuals, "esp", function()
 	return Config.esp.enabled
 end, function(value)
@@ -2611,6 +3091,11 @@ addCheck(visuals, "boxes", function()
 	return Config.esp.box
 end, function(value)
 	Config.esp.box = value
+end)
+addSelect(visuals, "box style", { "Box", "Corners" }, function()
+	return Config.esp.boxStyle
+end, function(value)
+	Config.esp.boxStyle = value
 end)
 addCheck(visuals, "box fill", function()
 	return Config.esp.fill
@@ -2622,47 +3107,64 @@ addCheck(visuals, "health bar", function()
 end, function(value)
 	Config.esp.health = value
 end)
+addCheck(visuals, "health text", function()
+	return Config.esp.healthText
+end, function(value)
+	Config.esp.healthText = value
+end)
 addCheck(visuals, "names", function()
 	return Config.esp.name
 end, function(value)
 	Config.esp.name = value
+end)
+addSelect(visuals, "name mode", { "DisplayName", "Name", "Both" }, function()
+	return Config.esp.nameMode
+end, function(value)
+	Config.esp.nameMode = value
 end)
 addCheck(visuals, "distance", function()
 	return Config.esp.distance
 end, function(value)
 	Config.esp.distance = value
 end)
-addCheck(visuals, "tracers", function()
+addSlider(visuals, "text size", 8, 20, 1, function()
+	return Config.esp.textSize
+end, function(value)
+	Config.esp.textSize = value
+end, " px", 0)
+addSlider(visuals, "opacity", 0.1, 1, 0.05, function()
+	return Config.esp.opacity
+end, function(value)
+	Config.esp.opacity = value
+end, "", 2)
+
+local espFilters = addSection(espCols[2], "tracers & filters")
+addCheck(espFilters, "tracers", function()
 	return Config.esp.tracer
 end, function(value)
 	Config.esp.tracer = value
 end)
-addCheck(visuals, "chams", function()
-	return Config.esp.chams
+addSelect(espFilters, "tracer origin", { "Bottom", "Center" }, function()
+	return Config.esp.tracerFrom
 end, function(value)
-	Config.esp.chams = value
-	if not value then
-		clearChams()
-	end
+	Config.esp.tracerFrom = value
 end)
-addCheck(visuals, "skeleton", function()
-	return Config.esp.skeleton
+addCheck(espFilters, "team color", function()
+	return Config.esp.teamColor
 end, function(value)
-	Config.esp.skeleton = value
+	Config.esp.teamColor = value
 end)
-addCheck(visuals, "head dot", function()
-	return Config.esp.headDot
-end, function(value)
-	Config.esp.headDot = value
-end)
-
-local filters = addSection(espCols[2], "filters")
-addCheck(filters, "off-screen arrows", function()
+addCheck(espFilters, "off-screen arrows", function()
 	return Config.esp.arrows
 end, function(value)
 	Config.esp.arrows = value
 end)
-addCheck(filters, "pickup esp", function()
+addSlider(espFilters, "arrow size", 6, 30, 1, function()
+	return Config.esp.arrowSize
+end, function(value)
+	Config.esp.arrowSize = value
+end, " px", 0)
+addCheck(espFilters, "pickup esp", function()
 	return Config.esp.pickups
 end, function(value)
 	Config.esp.pickups = value
@@ -2670,64 +3172,175 @@ end, function(value)
 		clearPickups()
 	end
 end)
-addCheck(filters, "team check", function()
+addCheck(espFilters, "team check", function()
 	return Config.esp.team
 end, function(value)
 	Config.esp.team = value
 end)
-addCheck(filters, "hide knocked", function()
+addCheck(espFilters, "hide knocked", function()
 	return Config.esp.hideKnocked
 end, function(value)
 	Config.esp.hideKnocked = value
 end)
-addSlider(filters, "max distance", 50, 2000, 25, function()
+addSlider(espFilters, "max distance", 50, 2000, 25, function()
 	return Config.esp.maxDist
 end, function(value)
 	Config.esp.maxDist = value
 end, " m", 0)
 
-local world = addSection(espCols[3], "world")
-addCheck(world, "fullbright", function()
+local espSkeleton = addSection(espCols[3], "chams & skeleton")
+addCheck(espSkeleton, "chams", function()
+	return Config.esp.chams
+end, function(value)
+	Config.esp.chams = value
+	if not value then
+		clearChams()
+	end
+end)
+addSlider(espSkeleton, "cham fill", 0, 0.95, 0.05, function()
+	return Config.esp.chamFill
+end, function(value)
+	Config.esp.chamFill = value
+end, "", 2)
+addCheck(espSkeleton, "skeleton", function()
+	return Config.esp.skeleton
+end, function(value)
+	Config.esp.skeleton = value
+end)
+addSlider(espSkeleton, "bone thickness", 1, 4, 0.5, function()
+	return Config.esp.skeletonThickness
+end, function(value)
+	Config.esp.skeletonThickness = value
+end, " px", 1)
+addCheck(espSkeleton, "head dot", function()
+	return Config.esp.headDot
+end, function(value)
+	Config.esp.headDot = value
+end)
+addSlider(espSkeleton, "head dot size", 2, 16, 1, function()
+	return Config.esp.headDotSize
+end, function(value)
+	Config.esp.headDotSize = value
+end, " px", 0)
+
+-- Visuals --------------------------------------------------------------
+
+local visCols = pageColumns(visualsPage, 3)
+
+local visWorld = addSection(visCols[1], "world")
+addCheck(visWorld, "fullbright", function()
 	return Config.visual.fullbright
 end, function(value)
 	Config.visual.fullbright = value
 end)
-addCheck(world, "no fog", function()
+addCheck(visWorld, "no fog", function()
 	return Config.visual.noFog
 end, function(value)
 	Config.visual.noFog = value
 end)
-addCheck(world, "custom crosshair", function()
+addCheck(visWorld, "no effects", function()
+	return Config.visual.noEffects
+end, function(value)
+	Config.visual.noEffects = value
+end)
+addCheck(visWorld, "custom time", function()
+	return Config.visual.customTime
+end, function(value)
+	Config.visual.customTime = value
+end)
+addSlider(visWorld, "time", 0, 24, 0.5, function()
+	return Config.visual.time
+end, function(value)
+	Config.visual.time = value
+end, " h", 1)
+addCheck(visWorld, "custom brightness", function()
+	return Config.visual.customBrightness
+end, function(value)
+	Config.visual.customBrightness = value
+end)
+addSlider(visWorld, "brightness", 0, 5, 0.1, function()
+	return Config.visual.brightness
+end, function(value)
+	Config.visual.brightness = value
+end, "", 1)
+
+local visCross = addSection(visCols[2], "crosshair & hud")
+addCheck(visCross, "custom crosshair", function()
 	return Config.visual.crosshair
 end, function(value)
 	Config.visual.crosshair = value
 end)
-addSlider(world, "crosshair length", 2, 24, 1, function()
+addSelect(visCross, "style", { "Cross", "Dot", "Circle" }, function()
+	return Config.visual.crosshairStyle
+end, function(value)
+	Config.visual.crosshairStyle = value
+end)
+addSlider(visCross, "gap", 0, 16, 1, function()
+	return Config.visual.crosshairGap
+end, function(value)
+	Config.visual.crosshairGap = value
+end, " px", 0)
+addSlider(visCross, "thickness", 1, 4, 0.5, function()
+	return Config.visual.crosshairThickness
+end, function(value)
+	Config.visual.crosshairThickness = value
+end, " px", 1)
+addSlider(visCross, "length", 2, 24, 1, function()
 	return Config.visual.crosshairSize
 end, function(value)
 	Config.visual.crosshairSize = value
 end, " px", 0)
-addCheck(world, "watermark", function()
+addCheck(visCross, "coords", function()
+	return Config.visual.coords
+end, function(value)
+	Config.visual.coords = value
+end)
+addCheck(visCross, "watermark", function()
 	return Config.visual.watermark
 end, function(value)
 	Config.visual.watermark = value
 end)
-addCheck(world, "clock", function()
+addCheck(visCross, "clock", function()
 	return Config.visual.clock
 end, function(value)
 	Config.visual.clock = value
 end)
-addCheck(world, "player count", function()
+addCheck(visCross, "player count", function()
 	return Config.visual.playerCount
 end, function(value)
 	Config.visual.playerCount = value
 end)
 
--- Misc ----------------------------------------------------------------
+local visPanel = addSection(visCols[3], "interface")
+addSlider(visPanel, "ui scale", 0.8, 1.2, 0.01, function()
+	return Config.visual.uiScale
+end, function(value)
+	Config.visual.uiScale = value
+	if panelScale then
+		panelScale.Scale = value
+	end
+end, "x", 2)
+addSlider(visPanel, "panel fade", 0, 0.5, 0.01, function()
+	return Config.visual.uiTransparency
+end, function(value)
+	Config.visual.uiTransparency = value
+	panel.BackgroundTransparency = value
+end, "", 2)
+addSlider(visPanel, "icon size", 34, 74, 2, function()
+	return Config.visual.iconSize
+end, function(value)
+	Config.visual.iconSize = value
+	UI.tweaks.iconSize(value)
+end, " px", 0)
+addInfo(visPanel, "x closes the panel")
+addInfo(visPanel, "h icon reopens it")
+addInfo(visPanel, "drag header to move")
 
-local miscCols = pageColumns(miscPage, 2)
+-- Movement -------------------------------------------------------------
 
-local movement = addSection(miscCols[1], "movement")
+local moveCols = pageColumns(movementPage, 2)
+
+local movement = addSection(moveCols[1], "movement")
 addCheck(movement, "walk speed", function()
 	return Config.move.speed
 end, function(value)
@@ -2771,6 +3384,11 @@ addSlider(movement, "fly speed", 10, 300, 5, function()
 end, function(value)
 	Config.move.flySpeed = value
 end, "", 0)
+addSelect(movement, "fly mode", { "Camera", "Horizontal" }, function()
+	return Config.move.flyMode
+end, function(value)
+	Config.move.flyMode = value
+end)
 addCheck(movement, "noclip", function()
 	return Config.move.noclip
 end, function(value)
@@ -2780,7 +3398,7 @@ end, function(value)
 	end
 end)
 
-local camera = addSection(miscCols[2], "camera & hud")
+local camera = addSection(moveCols[2], "camera & body")
 addCheck(camera, "camera fov", function()
 	return Config.move.fov
 end, function(value)
@@ -2791,6 +3409,36 @@ addSlider(camera, "fov", 30, 120, 1, function()
 end, function(value)
 	Config.move.fovValue = value
 end, " deg", 0)
+addCheck(camera, "camera distance", function()
+	return Config.move.cameraDist
+end, function(value)
+	Config.move.cameraDist = value
+end)
+addSlider(camera, "distance", 8, 128, 1, function()
+	return Config.move.cameraDistValue
+end, function(value)
+	Config.move.cameraDistValue = value
+end, " st", 0)
+addCheck(camera, "hip height", function()
+	return Config.move.hipHeight
+end, function(value)
+	Config.move.hipHeight = value
+end)
+addSlider(camera, "hip", -2, 6, 0.5, function()
+	return Config.move.hipHeightValue
+end, function(value)
+	Config.move.hipHeightValue = value
+end, " st", 1)
+addCheck(camera, "gravity", function()
+	return Config.move.gravity
+end, function(value)
+	Config.move.gravity = value
+end)
+addSlider(camera, "gravity value", 0, 400, 5, function()
+	return Config.move.gravityValue
+end, function(value)
+	Config.move.gravityValue = value
+end, "", 0)
 addInfo(camera, "space / leftctrl = fly up / down")
 addInfo(camera, "insert = hide ui")
 addInfo(camera, "rightshift = unload")
@@ -2818,6 +3466,11 @@ end, function(value)
 	Config.skin.rainbow = value
 	Skin.dirty = true
 end)
+addSlider(skinRows, "rainbow speed", 0.05, 1, 0.05, function()
+	return Config.skin.rainbowSpeed
+end, function(value)
+	Config.skin.rainbowSpeed = value
+end, "x", 2)
 addSelect(skinRows, "material", { "Neon", "ForceField", "Glass", "Metal", "SmoothPlastic", "Plastic" }, function()
 	return Config.skin.material
 end, function(value)
@@ -2834,8 +3487,93 @@ end)
 addAction(session, "unload client", function()
 	unloadClient()
 end)
+addAction(session, "reset character", function()
+	local humanoid = currentHumanoid()
+	if humanoid then
+		pcall(function()
+			humanoid.Health = 0
+		end)
+	end
+end)
 addInfo(session, "tap hilix.gg in the top bar")
 addInfo(session, "to drag the window")
+
+-- Radar ---------------------------------------------------------------
+
+local radarCols = pageColumns(radarPage, 2)
+
+local radarRows = addSection(radarCols[1], "radar")
+addCheck(radarRows, "enabled", function()
+	return Config.radar.enabled
+end, function(value)
+	Config.radar.enabled = value
+end)
+addSlider(radarRows, "size", 70, 200, 5, function()
+	return Config.radar.size
+end, function(value)
+	Config.radar.size = value
+end, " px", 0)
+addSlider(radarRows, "range", 50, 1000, 25, function()
+	return Config.radar.range
+end, function(value)
+	Config.radar.range = value
+end, " m", 0)
+addSlider(radarRows, "opacity", 0.1, 1, 0.05, function()
+	return Config.radar.opacity
+end, function(value)
+	Config.radar.opacity = value
+end, "", 2)
+addSlider(radarRows, "dot size", 2, 10, 1, function()
+	return Config.radar.dotSize
+end, function(value)
+	Config.radar.dotSize = value
+end, " px", 0)
+addCheck(radarRows, "names", function()
+	return Config.radar.names
+end, function(value)
+	Config.radar.names = value
+end)
+
+local radarInfo = addSection(radarCols[2], "info")
+addInfo(radarInfo, "top right minimap")
+addInfo(radarInfo, "rotates with camera")
+addInfo(radarInfo, "range = world studs")
+addInfo(radarInfo, "team color if available")
+
+-- Logs ----------------------------------------------------------------
+
+local logCols = pageColumns(logsPage, 2)
+
+local logRows = addSection(logCols[1], "event log")
+addCheck(logRows, "hit log", function()
+	return Config.logs.hitLog
+end, function(value)
+	Config.logs.hitLog = value
+end)
+addCheck(logRows, "kill feed", function()
+	return Config.logs.killFeed
+end, function(value)
+	Config.logs.killFeed = value
+end)
+addSlider(logRows, "duration", 1, 10, 0.5, function()
+	return Config.logs.duration
+end, function(value)
+	Config.logs.duration = value
+end, " s", 1)
+addSlider(logRows, "max lines", 2, 12, 1, function()
+	return Config.logs.maxLines
+end, function(value)
+	Config.logs.maxLines = value
+end, "", 0)
+addAction(logRows, "clear log", function()
+	clearLog()
+	toast("log cleared")
+end)
+
+local logInfo = addSection(logCols[2], "info")
+addInfo(logInfo, "hits appear bottom left")
+addInfo(logInfo, "kills from all players")
+addInfo(logInfo, "fades after duration")
 
 -- Configs -------------------------------------------------------------
 
@@ -2843,9 +3581,9 @@ local configCols = pageColumns(configPage, 2)
 
 local about = addSection(configCols[1], "hilix")
 addInfo(about, "hilix.gg - rivals")
-addInfo(about, "60+ features")
+addInfo(about, "100+ features & settings")
 addInfo(about, "for delta / mobile")
-addInfo(about, "v1.2.0")
+addInfo(about, "v1.3.0")
 addAction(about, "copy loadstring", function()
 	local url = "https://raw.githubusercontent.com/njjjjjhij/rivals-ninja/main/RivalsClient.lua"
 	pcall(function()
@@ -2862,12 +3600,14 @@ addInfo(keys, "tap a row - toggle feature")
 addInfo(keys, "tap a value - cycle option")
 addInfo(keys, "drag a bar - change value")
 
+end
 --------------------------------------------------------------------------
 -- Floating icon
 --------------------------------------------------------------------------
 
 local startSize = viewport()
-local iconX = math.max(math.floor(startSize.X / SCALE - px(66)), px(8))
+local iconPx = Config.visual.iconSize or 50
+local iconX = math.max(math.floor(startSize.X / SCALE - px(iconPx + 16)), px(8))
 local iconY = math.floor(startSize.Y / SCALE * 0.42)
 local icon = create("TextButton", {
 	Name = "HilixIcon",
@@ -2877,10 +3617,10 @@ local icon = create("TextButton", {
 	BorderSizePixel = 0,
 	Font = Enum.Font.GothamBlack,
 	Text = "H",
-	TextSize = px(26),
+	TextSize = px(math.floor(iconPx * 0.52)),
 	TextColor3 = HX.text,
 	Position = UDim2.fromOffset(px(iconX), px(iconY)),
-	Size = UDim2.fromOffset(px(50), px(50)),
+	Size = UDim2.fromOffset(px(iconPx), px(iconPx)),
 }, iconGui)
 create("UICorner", { CornerRadius = UDim.new(1, 0) }, icon)
 create("UIStroke", {
@@ -2894,9 +3634,9 @@ bindDrag(icon, function()
 	icon.baseY = iconY
 end, function(delta)
 	local size = viewport()
-	local maxX = math.max(size.X / SCALE - 50, 0)
+	local maxX = math.max(size.X / SCALE - iconPx, 0)
 	iconX = math.clamp(icon.baseX + delta.X / SCALE, 0, maxX)
-	iconY = math.clamp(icon.baseY + delta.Y / SCALE, 0, math.max(size.Y / SCALE - 50, 0))
+	iconY = math.clamp(icon.baseY + delta.Y / SCALE, 0, math.max(size.Y / SCALE - iconPx, 0))
 	if iconX > maxX - 18 then
 		iconX = maxX
 	elseif iconX < 18 then
@@ -2906,6 +3646,14 @@ end, function(delta)
 end, function()
 	UI.setVisible(not UI.visible)
 end)
+
+local function setIconSize(value)
+	iconPx = value
+	icon.Size = UDim2.fromOffset(px(value), px(value))
+	icon.TextSize = px(math.floor(value * 0.52))
+end
+UI.tweaks.iconSize = setIconSize
+setIconSize(Config.visual.iconSize or 50)
 
 --------------------------------------------------------------------------
 -- HUD
@@ -2998,6 +3746,7 @@ local function updateHud(delta)
 	end
 	hudClock = 0
 
+	coordsLabel.Visible = Config.visual.coords and true or false
 	local character = LocalPlayer.Character
 	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 	if rootPart then
@@ -3035,8 +3784,225 @@ local function updateHud(delta)
 	end
 end
 
+--------------------------------------------------------------------------
+-- Lock visuals, radar and event log
+--------------------------------------------------------------------------
+
+local lockLine = newDrawing("Line")
+local aimDot = newDrawing("Square")
+
+local function updateLockVisuals()
+	if not lockLine or not DRAW_OK then
+		return
+	end
+	local settings = Config.aimbot
+	local camera = workspace.CurrentCamera
+	local part = Aim.part
+	if not settings.enabled or not camera or not part or not part.Parent then
+		hideDrawing(lockLine)
+		hideDrawing(aimDot)
+		return
+	end
+	local screen, onScreen = camera:WorldToViewportPoint(part.Position)
+	if not onScreen or screen.Z <= 0 then
+		hideDrawing(lockLine)
+		hideDrawing(aimDot)
+		return
+	end
+	local size = camera.ViewportSize
+	local target = Vector2.new(screen.X, screen.Y)
+	if settings.lockLine then
+		setLine(lockLine, Vector2.new(size.X * 0.5, size.Y * 0.5), target, HX.accent, 1, 0.55)
+	else
+		hideDrawing(lockLine)
+	end
+	if settings.targetDot then
+		setSquare(aimDot, Vector2.new(target.X - px(3), target.Y - px(3)), Vector2.new(px(6), px(6)), HX.accent, 1, 0.15, true)
+	else
+		hideDrawing(aimDot)
+	end
+end
+
+local Radar = { dots = {}, frame = nil, border = nil, center = nil }
+
+local function updateRadar()
+	if not DRAW_OK then
+		return
+	end
+	if not Radar.frame then
+		Radar.frame = newDrawing("Square")
+		Radar.border = newDrawing("Square")
+		Radar.center = newDrawing("Square")
+	end
+	local settings = Config.radar
+	local camera = workspace.CurrentCamera
+	local seen = {}
+	if not settings.enabled or not camera then
+		hideDrawing(Radar.frame)
+		hideDrawing(Radar.border)
+		hideDrawing(Radar.center)
+		for _, entry in pairs(Radar.dots) do
+			hideDrawing(entry.dot)
+			hideDrawing(entry.label)
+		end
+		return
+	end
+	local view = camera.ViewportSize
+	local size = px(settings.size)
+	local x = view.X - size - px(18)
+	local y = px(96)
+	setSquare(Radar.frame, Vector2.new(x, y), Vector2.new(size, size), Color3.fromRGB(8, 8, 10), 1, math.clamp(1 - (settings.opacity or 0.85), 0, 0.95), true)
+	setSquare(Radar.border, Vector2.new(x, y), Vector2.new(size, size), HX.accent, 1, 0.35, false)
+	setSquare(Radar.center, Vector2.new(x + size * 0.5 - px(1), y + size * 0.5 - px(1)), Vector2.new(px(2), px(2)), HX.accent, 1, 0.1, true)
+	local origin = camera.CFrame.Position
+	local look = camera.CFrame.LookVector
+	local flat = Vector3.new(look.X, 0, look.Z)
+	if flat.Magnitude < 0.01 then
+		flat = Vector3.new(0, 0, -1)
+	end
+	flat = flat.Unit
+	local rightX, rightZ = -flat.Z, flat.X
+	local range = math.max(settings.range or 300, 1)
+	local half = size * 0.5 - px(4)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and not sameTeam(player) then
+			local character, humanoid, root = getCharacter(player)
+			if character and root and (not humanoid or humanoid.Health > 0) then
+				local rel = root.Position - origin
+				local dx = rel.X * rightX + rel.Z * rightZ
+				local dz = rel.X * flat.X + rel.Z * flat.Z
+				if math.abs(dx) <= range and math.abs(dz) <= range then
+					local entry = Radar.dots[player]
+					if not entry then
+						entry = { dot = newDrawing("Square"), label = newDrawing("Text") }
+						Radar.dots[player] = entry
+					end
+					local dot = math.max(settings.dotSize or 4, 2)
+					local sx = x + size * 0.5 + (dx / range) * half
+					local sy = y + size * 0.5 - (dz / range) * half
+					local color = HX.accent
+					if player.TeamColor then
+						color = player.TeamColor.Color
+					end
+					setSquare(entry.dot, Vector2.new(sx - px(dot * 0.5), sy - px(dot * 0.5)), Vector2.new(px(dot), px(dot)), color, 1, 0.1, true)
+					if settings.names then
+						setText(entry.label, player.Name, Vector2.new(sx, sy - px(8)), HX.text, px(7))
+					else
+						hideDrawing(entry.label)
+					end
+					seen[player] = true
+				end
+			end
+		end
+	end
+	for player, entry in pairs(Radar.dots) do
+		if not seen[player] then
+			hideDrawing(entry.dot)
+			hideDrawing(entry.label)
+		end
+	end
+end
+
+local LogBox = { rows = {}, frame = nil }
+
+local function relayoutLogs()
+	for index, row in ipairs(LogBox.rows) do
+		if row.label then
+			row.label.Position = UDim2.fromOffset(0, px((#LogBox.rows - index) * 13))
+		end
+	end
+end
+
+local function updateLogs()
+	local now = os.clock()
+	local changed = false
+	for index = #LogBox.rows, 1, -1 do
+		local row = LogBox.rows[index]
+		if now >= row.expires then
+			if row.label then
+				row.label:Destroy()
+			end
+			table.remove(LogBox.rows, index)
+			changed = true
+		end
+	end
+	if changed then
+		relayoutLogs()
+	end
+end
+
+local function pushLogImpl(text, color, kind)
+	if kind == "hit" and not Config.logs.hitLog then
+		return
+	end
+	if kind == "kill" and not Config.logs.killFeed then
+		return
+	end
+	if not LogBox.frame then
+		LogBox.frame = create("Frame", {
+			Name = "HilixLog",
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.new(0, px(12), 1, -px(132)),
+			Size = UDim2.fromOffset(px(320), px(90)),
+		}, root)
+	end
+	local label = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, px(12)),
+		Font = Enum.Font.Code,
+		Text = text,
+		TextSize = px(9),
+		TextColor3 = color or HX.text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextStrokeTransparency = 0.6,
+	}, LogBox.frame)
+	table.insert(LogBox.rows, { label = label, expires = os.clock() + (Config.logs.duration or 3) })
+	while #LogBox.rows > (Config.logs.maxLines or 5) do
+		local row = table.remove(LogBox.rows, 1)
+		if row.label then
+			row.label:Destroy()
+		end
+	end
+	relayoutLogs()
+end
+pushLog = pushLogImpl
+clearLog = function()
+	for _, row in ipairs(LogBox.rows) do
+		if row.label then
+			row.label:Destroy()
+		end
+	end
+	LogBox.rows = {}
+end
+
+local killConnections = {}
+local function watchPlayerKills(player)
+	pcall(function()
+		local function hookCharacter(character)
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if not humanoid then
+				return
+			end
+			table.insert(killConnections, humanoid.Died:Connect(function()
+				pushLogImpl((player.DisplayName or player.Name) .. " eliminated", HX.accent, "kill")
+			end))
+		end
+		if player.Character then
+			hookCharacter(player.Character)
+		end
+		table.insert(killConnections, player.CharacterAdded:Connect(hookCharacter))
+	end)
+end
+for _, player in ipairs(Players:GetPlayers()) do
+	watchPlayerKills(player)
+end
+pcall(function()
+	table.insert(killConnections, Players.PlayerAdded:Connect(watchPlayerKills))
+end)
+
 local function onRender(delta)
-	rageStep()
+	rageStep(delta)
 	if not Config.rage.enabled then
 		aimStep(delta)
 	end
@@ -3066,6 +4032,9 @@ local function onRender(delta)
 	end
 
 	updateFovCircle()
+	updateLockVisuals()
+	updateRadar()
+	updateLogs()
 	updateHud(delta)
 end
 
@@ -3151,12 +4120,32 @@ pendingDestroy = function()
 	end
 	Cross.lines = {}
 	removeDrawing(Cross.dot)
+	removeDrawing(Cross.circle)
 	Cross.dot = nil
+	Cross.circle = nil
 	for _, line in ipairs(HitMark.lines) do
 		removeDrawing(line)
 	end
 	HitMark.lines = {}
 	removeDrawing(targetHud)
+	removeDrawing(lockLine)
+	removeDrawing(aimDot)
+	if Radar.frame then
+		removeDrawing(Radar.frame)
+		removeDrawing(Radar.border)
+		removeDrawing(Radar.center)
+	end
+	for _, entry in pairs(Radar.dots) do
+		removeDrawing(entry.dot)
+		removeDrawing(entry.label)
+	end
+	Radar.dots = {}
+	for _, connection in ipairs(killConnections) do
+		pcall(function()
+			connection:Disconnect()
+		end)
+	end
+	killConnections = {}
 	removeDrawing(fovCircle)
 	fovCircle = nil
 	if gui then
@@ -3172,7 +4161,7 @@ pendingDestroy = function()
 end
 
 _G.HilixRivals = {
-	version = "1.2.0",
+	version = "1.3.0",
 	config = Config,
 	destroy = function()
 		if pendingDestroy then
