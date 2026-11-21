@@ -1,12 +1,12 @@
 --[[
-	Ninja  /  Rivals
-	Single-file aimbot + ESP interface for Roblox Rivals.
+	Hilix  /  Rivals
+	Hilix cheats interface for Roblox Rivals - sleepy-style panel.
 	Built for Delta on phone and PC.
 
 	Execute:
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/njjjjjhij/rivals-ninja/main/RivalsClient.lua"))()
 
-	Tap the round ninja icon to hide or show the interface.
+	Tap the round H icon to hide or show the interface.
 	Insert toggles the interface, RightShift unloads it.
 	Tap a feature name to enable it, tap + beside it for its settings.
 ]]
@@ -22,6 +22,9 @@ if not LocalPlayer then
 	return
 end
 
+if _G.HilixRivals and typeof(_G.HilixRivals) == "table" and _G.HilixRivals.destroy then
+	pcall(_G.HilixRivals.destroy)
+end
 if _G.NinjaRivals and typeof(_G.NinjaRivals) == "table" and _G.NinjaRivals.destroy then
 	pcall(_G.NinjaRivals.destroy)
 end
@@ -124,7 +127,7 @@ local Config = {
 		noFog = false,
 		crosshair = true,
 		crosshairSize = 9,
-		watermark = true,
+		watermark = false,
 		clock = true,
 		playerCount = true,
 	},
@@ -836,7 +839,7 @@ local function setCham(character)
 		return
 	end
 	local highlight = Instance.new("Highlight")
-	highlight.Name = "NinjaHighlight"
+	highlight.Name = "HilixHighlight"
 	highlight.Adornee = character
 	highlight.FillColor = Theme.accent
 	highlight.FillTransparency = 0.62
@@ -1445,7 +1448,7 @@ local function updateMovement(delta)
 		if root then
 			if not Move.flyBody then
 				local body = Instance.new("BodyVelocity")
-				body.Name = "NinjaFly"
+				body.Name = "HilixFly"
 				body.MaxForce = Vector3.new(1000000, 1000000, 1000000)
 				body.P = 1250
 				body.Parent = root
@@ -1622,16 +1625,34 @@ local function updateTargetHud()
 end
 
 --------------------------------------------------------------------------
--- Interface
+-- Hilix interface
 --------------------------------------------------------------------------
+
+local HX = {
+	panel = Color3.fromRGB(14, 14, 16),
+	panel2 = Color3.fromRGB(19, 19, 22),
+	line = Color3.fromRGB(40, 40, 45),
+	accent = Color3.fromRGB(236, 62, 48),
+	accentSoft = Color3.fromRGB(255, 112, 84),
+	text = Color3.fromRGB(238, 238, 242),
+	dim = Color3.fromRGB(152, 152, 160),
+	muted = Color3.fromRGB(98, 98, 106),
+	box = Color3.fromRGB(30, 30, 34),
+}
+
+local toast
 
 local UI = {
 	visible = true,
 	syncers = {},
+	pages = {},
+	navButtons = {},
+	tabButtons = {},
+	current = "main",
 }
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "NinjaRivals"
+gui.Name = "HilixCheats"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -1651,7 +1672,7 @@ local root = create("Frame", {
 }, gui)
 
 local iconGui = Instance.new("ScreenGui")
-iconGui.Name = "NinjaRivalsIcon"
+iconGui.Name = "HilixIcon"
 iconGui.ResetOnSpawn = false
 iconGui.IgnoreGuiInset = true
 iconGui.DisplayOrder = 501
@@ -1662,84 +1683,6 @@ end)
 if not iconParentOk then
 	iconGui.Parent = LocalPlayer:WaitForChild("PlayerGui", 10)
 end
-
-local brand = create("TextLabel", {
-	BackgroundTransparency = 1,
-	Position = UDim2.fromOffset(px(74), px(17)),
-	Size = UDim2.fromOffset(px(240), px(30)),
-	Font = Enum.Font.GothamBold,
-	Text = "NINJA / RIVALS",
-	TextSize = px(17),
-	TextColor3 = Theme.text,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	TextStrokeTransparency = 0.55,
-}, root)
-
-local watermarkLabel = create("TextLabel", {
-	BackgroundTransparency = 1,
-	Position = UDim2.fromOffset(px(74), px(39)),
-	Size = UDim2.fromOffset(px(360), px(14)),
-	Font = Enum.Font.Code,
-	Text = "",
-	TextSize = px(10),
-	TextColor3 = Theme.textMuted,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	TextStrokeTransparency = 0.6,
-}, root)
-
-local activePanel = create("Frame", {
-	BackgroundTransparency = 1,
-	AnchorPoint = Vector2.new(1, 0),
-	Position = UDim2.new(1, -px(16), 0, px(16)),
-	Size = UDim2.fromOffset(px(150), 0),
-	AutomaticSize = Enum.AutomaticSize.Y,
-}, root)
-create("UIListLayout", {
-	FillDirection = Enum.FillDirection.Vertical,
-	SortOrder = Enum.SortOrder.LayoutOrder,
-	Padding = UDim.new(0, px(2)),
-}, activePanel)
-create("TextLabel", {
-	BackgroundTransparency = 1,
-	Size = UDim2.new(1, 0, 0, px(16)),
-	LayoutOrder = 0,
-	Font = Enum.Font.GothamBold,
-	Text = "ACTIVE",
-	TextSize = px(10),
-	TextColor3 = Theme.textMuted,
-	TextXAlignment = Enum.TextXAlignment.Right,
-	TextStrokeTransparency = 0.6,
-}, activePanel)
-
-local coordsLabel = create("TextLabel", {
-	BackgroundTransparency = 1,
-	AnchorPoint = Vector2.new(0, 1),
-	Position = UDim2.new(0, px(14), 1, -px(12)),
-	Size = UDim2.fromOffset(px(200), px(56)),
-	Font = Enum.Font.Code,
-	Text = "X  --\nY  --\nZ  --",
-	TextSize = px(12),
-	TextColor3 = Theme.text,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	TextYAlignment = Enum.TextYAlignment.Bottom,
-	TextWrapped = true,
-	TextStrokeTransparency = 0.45,
-}, root)
-
-local statsLabel = create("TextLabel", {
-	BackgroundTransparency = 1,
-	AnchorPoint = Vector2.new(1, 1),
-	Position = UDim2.new(1, -px(14), 1, -px(12)),
-	Size = UDim2.fromOffset(px(210), px(94)),
-	Font = Enum.Font.Code,
-	Text = "FPS: --\nPing: -- ms\nTarget: -",
-	TextSize = px(12),
-	TextColor3 = Theme.text,
-	TextXAlignment = Enum.TextXAlignment.Right,
-	TextYAlignment = Enum.TextYAlignment.Bottom,
-	TextWrapped = true,
-	TextStrokeTransparency = 0.45,
-}, root)
 
 local function bindDrag(target, onBegin, onDelta, onTap)
 	target.InputBegan:Connect(function(input)
@@ -1825,1229 +1768,526 @@ local function bindTap(target, callback)
 	end)
 end
 
-local function makeWindow(title, x, y)
-	local size = viewport()
-	local window = {
-		title = title,
-		x = math.clamp(x, 0, math.max(size.X / SCALE - Metrics.width, 0)),
-		y = math.clamp(y, 0, math.max(size.Y / SCALE - Metrics.header, 0)),
-		width = Metrics.width,
-		order = 0,
-		collapsed = false,
-	}
+local viewportSize = viewport()
+local panelWidth = math.clamp(math.floor(viewportSize.X / SCALE - 24), 430, 560)
+local panelX = math.floor((viewportSize.X / SCALE - panelWidth) * 0.5)
+local panelY = 64
+local panelHeight = math.clamp(math.floor(viewportSize.Y / SCALE - panelY - 16), 270, 392)
 
-	local panel = create("Frame", {
-		Name = "Window_" .. title,
-		BackgroundColor3 = Theme.panel,
-		BackgroundTransparency = 0.04,
-		BorderSizePixel = 0,
-		Position = UDim2.fromOffset(px(window.x), px(window.y)),
-		Size = UDim2.fromOffset(px(window.width), px(Metrics.header)),
-		ClipsDescendants = true,
-	}, root)
+local panel = create("Frame", {
+	Name = "HilixPanel",
+	BackgroundColor3 = HX.panel,
+	BackgroundTransparency = 0.08,
+	BorderSizePixel = 0,
+	Position = UDim2.fromOffset(px(panelX), px(panelY)),
+	Size = UDim2.fromOffset(px(panelWidth), px(panelHeight)),
+	ClipsDescendants = true,
+}, root)
+create("UICorner", { CornerRadius = UDim.new(0, px(5)) }, panel)
+create("UIStroke", {
+	Color = HX.line,
+	Thickness = 1,
+	Transparency = 0.15,
+}, panel)
 
-	create("UIStroke", {
-		Color = Theme.stroke,
-		Thickness = 1,
-		Transparency = 0.4,
-	}, panel)
+local headerHeight = 26
+local header = create("Frame", {
+	Name = "Header",
+	BackgroundColor3 = HX.panel2,
+	BackgroundTransparency = 0.05,
+	BorderSizePixel = 0,
+	Size = UDim2.new(1, 0, 0, px(headerHeight)),
+}, panel)
+create("Frame", {
+	BackgroundColor3 = HX.line,
+	BorderSizePixel = 0,
+	Position = UDim2.new(0, 0, 1, -1),
+	Size = UDim2.new(1, 0, 0, 1),
+}, header)
 
-	create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Vertical,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 0),
-	}, panel)
+local logo = create("TextLabel", {
+	BackgroundTransparency = 1,
+	Position = UDim2.fromOffset(px(9), 0),
+	Size = UDim2.fromOffset(px(74), px(headerHeight)),
+	Font = Enum.Font.GothamBold,
+	Text = "hilix.gg",
+	TextSize = px(13),
+	TextColor3 = HX.accent,
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, header)
 
-	local header = create("TextButton", {
-		Name = "Header",
+create("TextLabel", {
+	BackgroundTransparency = 1,
+	Position = UDim2.fromOffset(px(70), 0),
+	Size = UDim2.fromOffset(px(50), px(headerHeight)),
+	Font = Enum.Font.Gotham,
+	Text = "cheats",
+	TextSize = px(9),
+	TextColor3 = HX.muted,
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, header)
+
+local function showPage(name)
+	UI.current = name
+	for key, page in pairs(UI.pages) do
+		page.Visible = key == name
+	end
+	for key, button in pairs(UI.navButtons) do
+		local active = key == name
+		button.TextColor3 = active and HX.text or HX.dim
+		if button.Marker then
+			button.Marker.Visible = active
+		end
+	end
+	for key, button in pairs(UI.tabButtons) do
+		button.TextColor3 = key == name and HX.accent or HX.muted
+	end
+end
+
+local tabNames = {
+	{ "rage", "aim" },
+	{ "visuals", "esp" },
+	{ "misc", "misc" },
+	{ "skins", "skins" },
+	{ "settings", "config" },
+}
+local tabX = px(120)
+for _, entry in ipairs(tabNames) do
+	local label, pageName = entry[1], entry[2]
+	local tab = create("TextButton", {
 		AutoButtonColor = false,
-		BackgroundColor3 = Theme.accent,
-		BorderSizePixel = 0,
-		Text = "",
-		Size = UDim2.new(1, 0, 0, px(Metrics.header)),
-		LayoutOrder = 0,
-	}, panel)
-
-	create("TextLabel", {
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(px(8), 0),
-		Size = UDim2.new(1, -px(28), 1, 0),
-		Font = Enum.Font.GothamBold,
-		Text = title,
-		TextSize = px(13),
-		TextColor3 = Theme.dark,
+		Position = UDim2.fromOffset(tabX, 0),
+		Size = UDim2.fromOffset(px(44), px(headerHeight)),
+		Font = Enum.Font.GothamMedium,
+		Text = label,
+		TextSize = px(10),
+		TextColor3 = HX.muted,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}, header)
+	tabX = tabX + px(44)
+	UI.tabButtons[pageName] = tab
+	bindTap(tab, function()
+		showPage(pageName)
+	end)
+end
 
-	local collapse = create("TextButton", {
-		AutoButtonColor = false,
-		BackgroundTransparency = 1,
-		Position = UDim2.new(1, -px(22), 0, 0),
-		Size = UDim2.fromOffset(px(22), px(Metrics.header)),
-		Font = Enum.Font.GothamBold,
-		Text = "-",
-		TextSize = px(15),
-		TextColor3 = Theme.dark,
-	}, header)
+local closeButton = create("TextButton", {
+	AutoButtonColor = false,
+	BackgroundTransparency = 1,
+	Position = UDim2.new(1, -px(26), 0, 0),
+	Size = UDim2.fromOffset(px(24), px(headerHeight)),
+	Font = Enum.Font.GothamBold,
+	Text = "x",
+	TextSize = px(13),
+	TextColor3 = HX.dim,
+}, header)
+bindTap(closeButton, function()
+	UI.setVisible(false)
+	toast("hilix hidden - tap H")
+end)
 
-	local body = create("ScrollingFrame", {
-		Name = "Body",
+bindDrag(header, function()
+	panel._baseX = panel.Position.X.Offset / SCALE
+	panel._baseY = panel.Position.Y.Offset / SCALE
+end, function(delta)
+	local size = viewport()
+	local maxX = math.max(size.X / SCALE - panelWidth, 0)
+	local maxY = math.max(size.Y / SCALE - px(headerHeight), 0)
+	local x = math.clamp(panel._baseX + delta.X / SCALE, 0, maxX)
+	local y = math.clamp(panel._baseY + delta.Y / SCALE, 0, maxY)
+	panel.Position = UDim2.fromOffset(px(x), px(y))
+end)
+
+local sidebarWidth = 62
+local sidebar = create("Frame", {
+	Name = "Sidebar",
+	BackgroundColor3 = HX.panel2,
+	BackgroundTransparency = 0.55,
+	BorderSizePixel = 0,
+	Position = UDim2.fromOffset(0, px(headerHeight)),
+	Size = UDim2.fromOffset(px(sidebarWidth), px(panelHeight) - px(headerHeight)),
+}, panel)
+create("Frame", {
+	BackgroundColor3 = HX.line,
+	BackgroundTransparency = 0.4,
+	BorderSizePixel = 0,
+	Position = UDim2.new(1, -1, 0, 0),
+	Size = UDim2.new(0, 1, 1, 0),
+}, sidebar)
+create("UIListLayout", {
+	FillDirection = Enum.FillDirection.Vertical,
+	SortOrder = Enum.SortOrder.LayoutOrder,
+	Padding = UDim.new(0, px(1)),
+}, sidebar)
+
+local content = create("Frame", {
+	Name = "Content",
+	BackgroundTransparency = 1,
+	Position = UDim2.fromOffset(px(sidebarWidth), px(headerHeight)),
+	Size = UDim2.new(1, -px(sidebarWidth), 1, -px(headerHeight)),
+}, panel)
+
+local function makePage(name)
+	local page = create("ScrollingFrame", {
+		Name = name,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, 0, 0, 0),
+		Size = UDim2.fromScale(1, 1),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ScrollBarThickness = px(3),
-		ScrollBarImageColor3 = Theme.accent,
-		ScrollBarImageTransparency = 0.35,
-		LayoutOrder = 1,
-		ClipsDescendants = true,
-	}, panel)
-
-	local content = create("Frame", {
-		Name = "Content",
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -px(4), 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
-	}, body)
-	create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Vertical,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 0),
+		ScrollBarThickness = 0,
+		Visible = false,
 	}, content)
+	UI.pages[name] = page
+	return page
+end
 
-	local function resizeBody()
-		local maxHeight = math.max(viewport().Y - px(window.y) - px(Metrics.header) - px(14), px(90))
-		local bodyHeight = math.min(content.AbsoluteSize.Y, maxHeight)
-		body.Size = UDim2.fromOffset(px(window.width), bodyHeight)
-		panel.Size = UDim2.fromOffset(px(window.width), px(Metrics.header) + bodyHeight)
-	end
-
-	local function setCollapsed(value)
-		window.collapsed = value and true or false
-		body.Visible = not window.collapsed
-		collapse.Text = window.collapsed and "+" or "-"
-		if window.collapsed then
-			panel.Size = UDim2.fromOffset(px(window.width), px(Metrics.header))
-		else
-			resizeBody()
-		end
-	end
-
-	content:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-		if not window.collapsed then
-			resizeBody()
-		end
+local navItems = {
+	{ "main", "main" },
+	{ "aim", "aim" },
+	{ "esp", "esp" },
+	{ "misc", "misc" },
+	{ "skins", "skins" },
+	{ "configs", "config" },
+}
+for index, entry in ipairs(navItems) do
+	local label, pageName = entry[1], entry[2]
+	local button = create("TextButton", {
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, px(24)),
+		LayoutOrder = index,
+		Font = Enum.Font.GothamMedium,
+		Text = "  " .. label,
+		TextSize = px(10),
+		TextColor3 = HX.dim,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, sidebar)
+	button.Marker = create("Frame", {
+		BackgroundColor3 = HX.accent,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(0, px(6)),
+		Size = UDim2.fromOffset(px(2), px(12)),
+		Visible = false,
+	}, button)
+	UI.navButtons[pageName] = button
+	bindTap(button, function()
+		showPage(pageName)
 	end)
-	task.defer(resizeBody)
+end
 
-	bindTap(collapse, function()
-		setCollapsed(not window.collapsed)
-	end)
-
-	bindDrag(header, function()
-		window.baseX = window.x
-		window.baseY = window.y
-	end, function(delta)
-		local size = viewport()
-		window.x = math.clamp(window.baseX + delta.X / SCALE, 0, math.max(size.X / SCALE - window.width, 0))
-		window.y = math.clamp(window.baseY + delta.Y / SCALE, 0, math.max(size.Y / SCALE - Metrics.header, 0))
-		panel.Position = UDim2.fromOffset(px(window.x), px(window.y))
-		resizeBody()
-	end)
-
-	function window.addRow(rowTitle, options)
-		options = options or {}
-		window.order = window.order + 1
-
-		local rowFrame = create("Frame", {
-			Name = "Row",
-			BackgroundColor3 = Theme.row,
-			BorderSizePixel = 0,
-			Size = UDim2.new(1, 0, 0, px(Metrics.row)),
-			LayoutOrder = window.order,
-		}, content)
-
-		if not IS_MOBILE then
-			rowFrame.MouseEnter:Connect(function()
-				rowFrame.BackgroundColor3 = Theme.rowHover
-			end)
-			rowFrame.MouseLeave:Connect(function()
-				rowFrame.BackgroundColor3 = Theme.row
-			end)
-		end
-
-		create("Frame", {
-			BackgroundColor3 = Theme.separator,
-			BackgroundTransparency = 0.25,
-			BorderSizePixel = 0,
-			Position = UDim2.new(0, 0, 1, -1),
-			Size = UDim2.new(1, 0, 0, 1),
-		}, rowFrame)
-
-		local plus = create("TextButton", {
-			AutoButtonColor = false,
+local function pageColumns(page, count)
+	local inner = panelWidth - sidebarWidth - 14
+	local gap = 6
+	local width = math.floor((inner - gap * (count - 1)) / count)
+	local list = {}
+	for index = 1, count do
+		local column = create("Frame", {
 			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(px(2), 0),
-			Size = UDim2.fromOffset(px(22), px(Metrics.row)),
-			Font = Enum.Font.GothamBold,
-			Text = "+",
-			TextSize = px(13),
-			TextColor3 = Theme.textDim,
-			Visible = false,
-		}, rowFrame)
-
-		local titleButton = create("TextButton", {
-			AutoButtonColor = false,
-			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(px(24), 0),
-			Size = UDim2.new(1, -px(38), 1, 0),
-			Font = Enum.Font.GothamMedium,
-			Text = rowTitle,
-			TextSize = px(13),
-			TextColor3 = Theme.text,
-			TextXAlignment = Enum.TextXAlignment.Left,
-		}, rowFrame)
-
-		local status = create("Frame", {
-			BackgroundColor3 = Theme.accent,
-			BorderSizePixel = 0,
-			Position = UDim2.new(1, -px(8), 0.5, -px(6)),
-			Size = UDim2.fromOffset(px(3), px(12)),
-			Visible = false,
-		}, rowFrame)
-
-		window.order = window.order + 1
-		local settings = create("Frame", {
-			Name = "Settings",
-			BackgroundColor3 = Theme.panelDeep,
-			BackgroundTransparency = 0.12,
-			Size = UDim2.new(1, 0, 0, 0),
+			Position = UDim2.fromOffset(px(6) + px((index - 1) * (width + gap)), px(6)),
+			Size = UDim2.fromOffset(px(width), 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
-			LayoutOrder = window.order,
-			Visible = false,
-		}, content)
+		}, page)
 		create("UIListLayout", {
 			FillDirection = Enum.FillDirection.Vertical,
 			SortOrder = Enum.SortOrder.LayoutOrder,
-			Padding = UDim.new(0, 0),
-		}, settings)
-
-		local row = {
-			frame = rowFrame,
-			settings = settings,
-			collapsed = true,
-			widgetOrder = 0,
-		}
-
-		function row.setActive(on)
-			status.Visible = on and true or false
-			titleButton.TextColor3 = on and Theme.accent or Theme.text
-		end
-
-		function row.setExpanded(on)
-			row.collapsed = not on
-			settings.Visible = on and true or false
-			plus.Text = on and "-" or "+"
-		end
-
-		function row.enablePlus()
-			plus.Visible = true
-		end
-
-		function row.addToggle(text, get, set)
-			row.enablePlus()
-			row.widgetOrder = row.widgetOrder + 1
-
-			local line = create("TextButton", {
-				AutoButtonColor = false,
-				BackgroundTransparency = 1,
-				Text = "",
-				Size = UDim2.new(1, 0, 0, px(28)),
-				LayoutOrder = row.widgetOrder,
-			}, settings)
-
-			local caption = create("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(px(22), 0),
-				Size = UDim2.new(1, -px(64), 1, 0),
-				Font = Enum.Font.Gotham,
-				Text = text,
-				TextSize = px(12),
-				TextColor3 = Theme.textDim,
-				TextXAlignment = Enum.TextXAlignment.Left,
-			}, line)
-
-			local track = create("Frame", {
-				BackgroundColor3 = Theme.rowActive,
-				BorderSizePixel = 0,
-				Position = UDim2.new(1, -px(38), 0.5, -px(8)),
-				Size = UDim2.fromOffset(px(30), px(16)),
-			}, line)
-			create("UICorner", { CornerRadius = UDim.new(0, px(3)) }, track)
-
-			local knob = create("Frame", {
-				BackgroundColor3 = Theme.textMuted,
-				BorderSizePixel = 0,
-				Position = UDim2.new(0, px(2), 0.5, -px(6)),
-				Size = UDim2.fromOffset(px(12), px(12)),
-			}, track)
-			create("UICorner", { CornerRadius = UDim.new(1, 0) }, knob)
-
-			local function paint()
-				local on = get() and true or false
-				track.BackgroundColor3 = on and Theme.accentDark or Theme.rowActive
-				knob.Position = UDim2.new(0, on and px(16) or px(2), 0.5, -px(6))
-				knob.BackgroundColor3 = on and Theme.text or Theme.textMuted
-				caption.TextColor3 = on and Theme.text or Theme.textDim
-			end
-
-			bindTap(line, function()
-				set(not get())
-				UI.sync()
-			end)
-
-			paint()
-			table.insert(UI.syncers, paint)
-		end
-
-		function row.addSlider(text, minValue, maxValue, step, get, set, suffix, decimals)
-			row.enablePlus()
-			row.widgetOrder = row.widgetOrder + 1
-
-			local line = create("TextButton", {
-				AutoButtonColor = false,
-				BackgroundTransparency = 1,
-				Text = "",
-				Size = UDim2.new(1, 0, 0, px(34)),
-				LayoutOrder = row.widgetOrder,
-			}, settings)
-
-			create("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(px(22), 0),
-				Size = UDim2.new(1, -px(96), 0, px(16)),
-				Font = Enum.Font.Gotham,
-				Text = text,
-				TextSize = px(12),
-				TextColor3 = Theme.textDim,
-				TextXAlignment = Enum.TextXAlignment.Left,
-			}, line)
-
-			local valueLabel = create("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.new(1, -px(76), 0, 0),
-				Size = UDim2.fromOffset(px(52), px(16)),
-				Font = Enum.Font.Code,
-				Text = "",
-				TextSize = px(11),
-				TextColor3 = Theme.accent,
-				TextXAlignment = Enum.TextXAlignment.Right,
-			}, line)
-
-			local track = create("Frame", {
-				BackgroundColor3 = Theme.rowActive,
-				BorderSizePixel = 0,
-				Position = UDim2.fromOffset(px(22), px(22)),
-				Size = UDim2.new(1, -px(34), 0, px(6)),
-			}, line)
-			create("UICorner", { CornerRadius = UDim.new(1, 0) }, track)
-
-			local fill = create("Frame", {
-				BackgroundColor3 = Theme.accentDark,
-				BorderSizePixel = 0,
-				Size = UDim2.new(0, 0, 1, 0),
-			}, track)
-			create("UICorner", { CornerRadius = UDim.new(1, 0) }, fill)
-
-			local knob = create("Frame", {
-				BackgroundColor3 = Theme.accent,
-				BorderSizePixel = 0,
-				AnchorPoint = Vector2.new(0.5, 0.5),
-				Position = UDim2.new(0, 0, 0.5, 0),
-				Size = UDim2.fromOffset(px(12), px(12)),
-				ZIndex = 2,
-			}, track)
-			create("UICorner", { CornerRadius = UDim.new(1, 0) }, knob)
-
-			local format = "%." .. tostring(decimals or 0) .. "f"
-
-			local function paint()
-				local ratio = math.clamp((get() - minValue) / math.max(maxValue - minValue, 0.0001), 0, 1)
-				fill.Size = UDim2.new(ratio, 0, 1, 0)
-				knob.Position = UDim2.new(ratio, 0, 0.5, 0)
-				valueLabel.Text = string.format(format, get()) .. (suffix or "")
-			end
-
-			local function valueAt(x)
-				local ratio = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
-				local raw = minValue + (maxValue - minValue) * ratio
-				if step and step > 0 then
-					raw = math.floor(raw / step + 0.5) * step
-				end
-				return math.clamp(raw, minValue, maxValue)
-			end
-
-			line.InputBegan:Connect(function(input)
-				if not isPrimary(input) then
-					return
-				end
-				set(valueAt(input.Position.X))
-				paint()
-				local movingConnection = input.Changed:Connect(function()
-					if input.UserInputState == Enum.UserInputState.End then
-						return
-					end
-					set(valueAt(input.Position.X))
-					paint()
-				end)
-				local endConnection
-				endConnection = UserInputService.InputEnded:Connect(function(other)
-					if other ~= input then
-						return
-					end
-					if movingConnection then
-						movingConnection:Disconnect()
-					end
-					if endConnection then
-						endConnection:Disconnect()
-					end
-				end)
-			end)
-
-			paint()
-			table.insert(UI.syncers, paint)
-		end
-
-		function row.addDropdown(text, options, get, set)
-			row.enablePlus()
-			row.widgetOrder = row.widgetOrder + 1
-
-			local line = create("TextButton", {
-				AutoButtonColor = false,
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, px(28)),
-				LayoutOrder = row.widgetOrder,
-				Text = "",
-			}, settings)
-
-			create("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(px(22), 0),
-				Size = UDim2.new(1, -px(104), 1, 0),
-				Font = Enum.Font.Gotham,
-				Text = text,
-				TextSize = px(12),
-				TextColor3 = Theme.textDim,
-				TextXAlignment = Enum.TextXAlignment.Left,
-			}, line)
-
-			local valueLabel = create("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.new(1, -px(98), 0, 0),
-				Size = UDim2.fromOffset(px(74), px(28)),
-				Font = Enum.Font.Code,
-				Text = tostring(get()),
-				TextSize = px(11),
-				TextColor3 = Theme.accent,
-				TextXAlignment = Enum.TextXAlignment.Right,
-			}, line)
-
-			create("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.new(1, -px(18), 0, 0),
-				Size = UDim2.fromOffset(px(14), px(28)),
-				Font = Enum.Font.GothamBold,
-				Text = "v",
-				TextSize = px(10),
-				TextColor3 = Theme.textMuted,
-				TextXAlignment = Enum.TextXAlignment.Center,
-			}, line)
-
-			row.widgetOrder = row.widgetOrder + 1
-			local menu = create("Frame", {
-				BackgroundColor3 = Theme.panel,
-				BackgroundTransparency = 0.05,
-				BorderSizePixel = 0,
-				Size = UDim2.new(1, 0, 0, 0),
-				AutomaticSize = Enum.AutomaticSize.Y,
-				LayoutOrder = row.widgetOrder,
-				Visible = false,
-			}, settings)
-			create("UIListLayout", {
-				FillDirection = Enum.FillDirection.Vertical,
-				SortOrder = Enum.SortOrder.LayoutOrder,
-				Padding = UDim.new(0, 0),
-			}, menu)
-
-			for index, option in ipairs(options) do
-				local optionButton = create("TextButton", {
-					AutoButtonColor = false,
-					BackgroundTransparency = 1,
-					Size = UDim2.new(1, 0, 0, px(24)),
-					LayoutOrder = index,
-					Font = Enum.Font.Gotham,
-					Text = "     " .. option,
-					TextSize = px(12),
-					TextColor3 = Theme.textDim,
-					TextXAlignment = Enum.TextXAlignment.Left,
-				}, menu)
-
-				optionButton.MouseEnter:Connect(function()
-					optionButton.TextColor3 = Theme.accent
-				end)
-				optionButton.MouseLeave:Connect(function()
-					optionButton.TextColor3 = Theme.textDim
-				end)
-
-				bindTap(optionButton, function()
-					set(option)
-					valueLabel.Text = tostring(option)
-					menu.Visible = false
-					UI.sync()
-				end)
-			end
-
-			bindTap(line, function()
-				menu.Visible = not menu.Visible
-			end)
-		end
-
-		function row.addButton(text, callback)
-			row.enablePlus()
-			row.widgetOrder = row.widgetOrder + 1
-
-			local button = create("TextButton", {
-				AutoButtonColor = false,
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, px(28)),
-				LayoutOrder = row.widgetOrder,
-				Font = Enum.Font.GothamMedium,
-				Text = "     " .. text,
-				TextSize = px(12),
-				TextColor3 = Theme.accent,
-				TextXAlignment = Enum.TextXAlignment.Left,
-			}, settings)
-
-			bindTap(button, callback)
-		end
-
-		function row.addInfo(text)
-			row.enablePlus()
-			row.widgetOrder = row.widgetOrder + 1
-
-			create("TextLabel", {
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, px(24)),
-				LayoutOrder = row.widgetOrder,
-				Font = Enum.Font.Gotham,
-				Text = "     " .. text,
-				TextSize = px(11),
-				TextColor3 = Theme.textMuted,
-				TextXAlignment = Enum.TextXAlignment.Left,
-			}, settings)
-		end
-
-		if options.get then
-			local function sync()
-				row.setActive(options.get())
-			end
-			table.insert(UI.syncers, sync)
-			sync()
-		end
-
-		if options.toggle then
-			bindTap(titleButton, function()
-				options.toggle()
-				UI.sync()
-			end)
-		elseif options.onClick then
-			bindTap(titleButton, options.onClick)
-		end
-
-		bindTap(plus, function()
-			if row.widgetOrder == 0 then
-				return
-			end
-			row.setExpanded(row.collapsed)
-		end)
-
-		return row
+			Padding = UDim.new(0, px(1)),
+		}, column)
+		column._order = 0
+		list[index] = column
 	end
-
-	return window
+	return list
 end
 
-local function refreshActive()
-	for _, label in ipairs(UI.activeLabels or {}) do
-		label:Destroy()
+local function addSection(column, title)
+	column._order = column._order + 1
+	local section = create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = column._order,
+	}, column)
+	create("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, px(14)),
+		Font = Enum.Font.GothamBold,
+		Text = title,
+		TextSize = px(9),
+		TextColor3 = HX.accentSoft,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTransparency = 0.05,
+	}, section)
+	local rows = create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, px(14)),
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+	}, section)
+	create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Vertical,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, px(1)),
+	}, rows)
+	rows._order = 0
+	return rows
+end
+
+local function addCheck(rows, label, get, set)
+	rows._order = rows._order + 1
+	local row = create("TextButton", {
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		Text = "",
+		Size = UDim2.new(1, 0, 0, px(16)),
+		LayoutOrder = rows._order,
+	}, rows)
+	local box = create("Frame", {
+		BackgroundColor3 = HX.box,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(0, px(3)),
+		Size = UDim2.fromOffset(px(9), px(9)),
+	}, row)
+	create("UICorner", { CornerRadius = UDim.new(0, px(1)) }, box)
+	create("UIStroke", { Color = HX.line, Thickness = 1, Transparency = 0.2 }, box)
+	local tick = create("Frame", {
+		BackgroundColor3 = HX.accent,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(px(1), px(1)),
+		Size = UDim2.fromOffset(px(7), px(7)),
+		Visible = false,
+	}, box)
+	create("UICorner", { CornerRadius = UDim.new(0, px(1)) }, tick)
+	local text = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(px(15), 0),
+		Size = UDim2.new(1, -px(15), 1, 0),
+		Font = Enum.Font.Gotham,
+		Text = label,
+		TextSize = px(10),
+		TextColor3 = HX.dim,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, row)
+	local function paint()
+		local on = get() and true or false
+		tick.Visible = on
+		text.TextColor3 = on and HX.text or HX.dim
 	end
-	UI.activeLabels = {}
+	bindTap(row, function()
+		set(not get())
+		UI.sync()
+	end)
+	paint()
+	table.insert(UI.syncers, paint)
+end
 
-	local items = {
-		{ "Aimbot", Config.aimbot.enabled },
-		{ "Rage", Config.rage.enabled },
-		{ "Trigger", Config.trigger.enabled },
-		{ "ESP", Config.esp.enabled },
-		{ "Skin Unlocker", Config.skin.enabled },
-		{ "Chams", Config.esp.enabled and Config.esp.chams },
-		{ "Tracer", Config.esp.enabled and Config.esp.tracer },
-		{ "FOV", Config.aimbot.enabled and Config.aimbot.showFov },
-	}
-
-	for index, item in ipairs(items) do
-		if item[2] then
-			local label = create("TextLabel", {
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, px(18)),
-				LayoutOrder = index,
-				Font = Enum.Font.GothamMedium,
-				Text = item[1],
-				TextSize = px(12),
-				TextColor3 = Theme.accent,
-				TextXAlignment = Enum.TextXAlignment.Right,
-				TextStrokeTransparency = 0.45,
-			}, activePanel)
-			table.insert(UI.activeLabels, label)
+local function addSlider(rows, label, minValue, maxValue, step, get, set, suffix, decimals)
+	rows._order = rows._order + 1
+	local row = create("TextButton", {
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		Text = "",
+		Size = UDim2.new(1, 0, 0, px(23)),
+		LayoutOrder = rows._order,
+	}, rows)
+	create("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, 0),
+		Size = UDim2.new(1, -px(45), 0, px(12)),
+		Font = Enum.Font.Gotham,
+		Text = label,
+		TextSize = px(10),
+		TextColor3 = HX.dim,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, row)
+	local valueLabel = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(1, -px(45), 0, 0),
+		Size = UDim2.fromOffset(px(45), px(12)),
+		Font = Enum.Font.Code,
+		Text = "",
+		TextSize = px(9),
+		TextColor3 = HX.accentSoft,
+		TextXAlignment = Enum.TextXAlignment.Right,
+	}, row)
+	local track = create("Frame", {
+		BackgroundColor3 = HX.box,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(0, px(16)),
+		Size = UDim2.new(1, 0, 0, px(2)),
+	}, row)
+	local fill = create("Frame", {
+		BackgroundColor3 = HX.accent,
+		BorderSizePixel = 0,
+		Size = UDim2.new(0, 0, 1, 0),
+	}, track)
+	local format = "%." .. tostring(decimals or 0) .. "f"
+	local function paint()
+		local ratio = math.clamp((get() - minValue) / math.max(maxValue - minValue, 0.0001), 0, 1)
+		fill.Size = UDim2.new(ratio, 0, 1, 0)
+		valueLabel.Text = string.format(format, get()) .. (suffix or "")
+	end
+	local function valueAt(x)
+		local ratio = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+		local raw = minValue + (maxValue - minValue) * ratio
+		if step and step > 0 then
+			raw = math.floor(raw / step + 0.5) * step
 		end
+		return math.clamp(raw, minValue, maxValue)
 	end
+	row.InputBegan:Connect(function(input)
+		if not isPrimary(input) then
+			return
+		end
+		set(valueAt(input.Position.X))
+		paint()
+		local moving = input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				return
+			end
+			set(valueAt(input.Position.X))
+			paint()
+		end)
+		local ended
+		ended = UserInputService.InputEnded:Connect(function(other)
+			if other ~= input then
+				return
+			end
+			if moving then
+				moving:Disconnect()
+			end
+			if ended then
+				ended:Disconnect()
+			end
+		end)
+	end)
+	paint()
+	table.insert(UI.syncers, paint)
+end
+
+local function addSelect(rows, label, options, get, set)
+	rows._order = rows._order + 1
+	local row = create("TextButton", {
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		Text = "",
+		Size = UDim2.new(1, 0, 0, px(17)),
+		LayoutOrder = rows._order,
+	}, rows)
+	create("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -px(70), 1, 0),
+		Font = Enum.Font.Gotham,
+		Text = label,
+		TextSize = px(10),
+		TextColor3 = HX.dim,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, row)
+	local value = create("TextLabel", {
+		BackgroundColor3 = HX.box,
+		BorderSizePixel = 0,
+		Position = UDim2.new(1, -px(72), 0, px(2)),
+		Size = UDim2.fromOffset(px(72), px(13)),
+		Font = Enum.Font.Code,
+		Text = "",
+		TextSize = px(9),
+		TextColor3 = HX.accentSoft,
+	}, row)
+	create("UICorner", { CornerRadius = UDim.new(0, px(2)) }, value)
+	local function paint()
+		value.Text = tostring(get())
+	end
+	local function nextOption()
+		local current = tostring(get())
+		local at = 1
+		for index, option in ipairs(options) do
+			if tostring(option) == current then
+				at = index
+				break
+			end
+		end
+		at = at % #options + 1
+		set(options[at])
+		UI.sync()
+	end
+	bindTap(row, nextOption)
+	paint()
+	table.insert(UI.syncers, paint)
+end
+
+local function addAction(rows, label, callback)
+	rows._order = rows._order + 1
+	local row = create("TextButton", {
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, px(17)),
+		LayoutOrder = rows._order,
+		Font = Enum.Font.GothamMedium,
+		Text = "> " .. label,
+		TextSize = px(10),
+		TextColor3 = HX.text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, rows)
+	bindTap(row, callback)
+end
+
+local function addInfo(rows, text)
+	rows._order = rows._order + 1
+	create("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, px(13)),
+		LayoutOrder = rows._order,
+		Font = Enum.Font.Code,
+		Text = text,
+		TextSize = px(9),
+		TextColor3 = HX.muted,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, rows)
 end
 
 function UI.sync()
-	for _, sync in ipairs(UI.syncers) do
-		pcall(sync)
+	for _, paint in ipairs(UI.syncers) do
+		pcall(paint)
 	end
-	refreshActive()
 end
-
-local function toast(message)
-	if UI.notice then
-		UI.notice:Destroy()
-	end
-	local notice = create("TextLabel", {
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, px(92)),
-		Size = UDim2.fromOffset(px(340), px(22)),
-		Font = Enum.Font.GothamBold,
-		Text = message,
-		TextSize = px(14),
-		TextColor3 = Theme.text,
-		TextStrokeTransparency = 0.45,
-	}, iconGui)
-	UI.notice = notice
-	TweenService:Create(notice, TweenInfo.new(2.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		TextTransparency = 1,
-		TextStrokeTransparency = 1,
-	}):Play()
-	task.delay(2.6, function()
-		if UI.notice == notice then
-			notice:Destroy()
-			UI.notice = nil
-		end
-	end)
-end
-
-notify = toast
 
 function UI.setVisible(value)
 	UI.visible = value and true or false
 	gui.Enabled = UI.visible
 end
 
-local aimWindow = makeWindow("Aimbot", 12, 70)
-local espWindow = makeWindow("ESP", 202, 70)
-local moveWindow = makeWindow("Movement", 392, 70)
-local interfaceWindow = makeWindow("Interface", 582, 70)
+local noticeLabel
 
---------------------------------------------------------------------------
--- Aimbot panel
---------------------------------------------------------------------------
-
-local aimRow = aimWindow.addRow("Aimbot", {
-	get = function()
-		return Config.aimbot.enabled
-	end,
-	toggle = function()
-		Config.aimbot.enabled = not Config.aimbot.enabled
-		if Config.aimbot.enabled then
-			toast("Aimbot enabled")
+local function toast(message)
+	if noticeLabel then
+		noticeLabel:Destroy()
+	end
+	local notice = create("TextLabel", {
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, px(40)),
+		Size = UDim2.fromOffset(px(360), px(20)),
+		Font = Enum.Font.GothamBold,
+		Text = message,
+		TextSize = px(12),
+		TextColor3 = HX.accentSoft,
+		TextStrokeTransparency = 0.55,
+	}, gui)
+	noticeLabel = notice
+	TweenService:Create(notice, TweenInfo.new(2.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	}):Play()
+	task.delay(2.6, function()
+		if noticeLabel == notice then
+			notice:Destroy()
+			noticeLabel = nil
 		end
-	end,
-})
+	end)
+end
 
-aimRow.addToggle("Enabled", function()
-	return Config.aimbot.enabled
-end, function(value)
-	Config.aimbot.enabled = value
-end)
-
-aimRow.addDropdown("Mode", { "Always", "Hold RMB", "Hold Q" }, function()
-	return Config.aimbot.mode
-end, function(value)
-	Config.aimbot.mode = value
-end)
-
-aimRow.addSlider("FOV", 10, 180, 1, function()
-	return Config.aimbot.fov
-end, function(value)
-	Config.aimbot.fov = value
-end, " deg", 0)
-
-aimRow.addSlider("Smoothness", 1, 40, 0.5, function()
-	return Config.aimbot.smooth
-end, function(value)
-	Config.aimbot.smooth = value
-end, "", 1)
-
-aimRow.addSlider("Max Turn", 60, 720, 10, function()
-	return Config.aimbot.turn
-end, function(value)
-	Config.aimbot.turn = value
-end, " d/s", 0)
-
-aimRow.addSlider("Prediction", 0, 20, 1, function()
-	return Config.aimbot.prediction
-end, function(value)
-	Config.aimbot.prediction = value
-end, "%", 0)
-
-aimRow.addSlider("Jitter Filter", 0, 200, 5, function()
-	return Config.aimbot.jitter
-end, function(value)
-	Config.aimbot.jitter = value
-end, " ms", 0)
-
-aimRow.addSlider("Deadzone", 0, 20, 1, function()
-	return Config.aimbot.deadzone
-end, function(value)
-	Config.aimbot.deadzone = value
-end, " px", 0)
-
-aimRow.addDropdown("Target", { "Head", "Body", "Nearest" }, function()
-	return Config.aimbot.part
-end, function(value)
-	Config.aimbot.part = value
-end)
-
-aimRow.addToggle("Instant Lock", function()
-	return Config.aimbot.instant
-end, function(value)
-	Config.aimbot.instant = value
-end)
-
-aimRow.addToggle("1st Person Lock", function()
-	return Config.aimbot.firstPerson
-end, function(value)
-	Config.aimbot.firstPerson = value
-end)
-
-aimRow.addToggle("Wall Check", function()
-	return Config.aimbot.wall
-end, function(value)
-	Config.aimbot.wall = value
-	Aim.cache = {}
-end)
-
-aimRow.addToggle("Team Check", function()
-	return Config.aimbot.team
-end, function(value)
-	Config.aimbot.team = value
-end)
-
-aimRow.addToggle("FOV Circle", function()
-	return Config.aimbot.showFov
-end, function(value)
-	Config.aimbot.showFov = value
-end)
-
-aimRow.addToggle("Sticky", function()
-	return Config.aimbot.sticky
-end, function(value)
-	Config.aimbot.sticky = value
-end)
-
-aimRow.addToggle("Auto Fire", function()
-	return Config.aimbot.autoFire
-end, function(value)
-	Config.aimbot.autoFire = value
-end)
-
-aimRow.addToggle("Auto Scope", function()
-	return Config.aimbot.autoScope
-end, function(value)
-	Config.aimbot.autoScope = value
-	if not value then
-		applyScope(false)
-	end
-end)
-
-aimRow.addToggle("Hit Marker", function()
-	return Config.aimbot.hitMarker
-end, function(value)
-	Config.aimbot.hitMarker = value
-end)
-
-aimRow.addToggle("Kill Notify", function()
-	return Config.aimbot.killNotify
-end, function(value)
-	Config.aimbot.killNotify = value
-end)
-
-aimRow.addToggle("Target HUD", function()
-	return Config.aimbot.targetHud
-end, function(value)
-	Config.aimbot.targetHud = value
-end)
-
-local rageRow = aimWindow.addRow("Ragebot", {
-	get = function()
-		return Config.rage.enabled
-	end,
-	toggle = function()
-		Config.rage.enabled = not Config.rage.enabled
-		if not Config.rage.enabled then
-			Rage.player = nil
-		end
-	end,
-})
-
-rageRow.addToggle("Enabled", function()
-	return Config.rage.enabled
-end, function(value)
-	Config.rage.enabled = value
-	if not value then
-		Rage.player = nil
-	end
-end)
-
-rageRow.addSlider("FOV", 10, 180, 1, function()
-	return Config.rage.fov
-end, function(value)
-	Config.rage.fov = value
-end, " deg", 0)
-
-rageRow.addDropdown("Target", { "Head", "Body", "Nearest" }, function()
-	return Config.rage.part
-end, function(value)
-	Config.rage.part = value
-end)
-
-rageRow.addSlider("Prediction", 0, 25, 1, function()
-	return Config.rage.prediction
-end, function(value)
-	Config.rage.prediction = value
-end, "%", 0)
-
-rageRow.addToggle("Wall Check", function()
-	return Config.rage.wall
-end, function(value)
-	Config.rage.wall = value
-end)
-
-rageRow.addToggle("Team Check", function()
-	return Config.rage.team
-end, function(value)
-	Config.rage.team = value
-end)
-
-rageRow.addToggle("Sticky", function()
-	return Config.rage.sticky
-end, function(value)
-	Config.rage.sticky = value
-end)
-
-rageRow.addToggle("Auto Fire", function()
-	return Config.rage.autoFire
-end, function(value)
-	Config.rage.autoFire = value
-end)
-
-local triggerRow = aimWindow.addRow("Triggerbot", {
-	get = function()
-		return Config.trigger.enabled
-	end,
-	toggle = function()
-		Config.trigger.enabled = not Config.trigger.enabled
-	end,
-})
-
-triggerRow.addToggle("Enabled", function()
-	return Config.trigger.enabled
-end, function(value)
-	Config.trigger.enabled = value
-end)
-
-triggerRow.addSlider("Range", 20, 1000, 10, function()
-	return Config.trigger.range
-end, function(value)
-	Config.trigger.range = value
-end, " m", 0)
-
-triggerRow.addSlider("Delay", 0, 500, 10, function()
-	return Config.trigger.delay
-end, function(value)
-	Config.trigger.delay = value
-end, " ms", 0)
-
-triggerRow.addToggle("Team Check", function()
-	return Config.trigger.team
-end, function(value)
-	Config.trigger.team = value
-end)
-
---------------------------------------------------------------------------
--- ESP panel
---------------------------------------------------------------------------
-
-local espRow = espWindow.addRow("ESP", {
-	get = function()
-		return Config.esp.enabled
-	end,
-	toggle = function()
-		Config.esp.enabled = not Config.esp.enabled
-		if Config.esp.enabled then
-			toast("ESP enabled")
-		end
-	end,
-})
-
-espRow.addToggle("Enabled", function()
-	return Config.esp.enabled
-end, function(value)
-	Config.esp.enabled = value
-end)
-
-espRow.addToggle("Boxes", function()
-	return Config.esp.box
-end, function(value)
-	Config.esp.box = value
-end)
-
-espRow.addToggle("Box Fill", function()
-	return Config.esp.fill
-end, function(value)
-	Config.esp.fill = value
-end)
-
-espRow.addToggle("Health Bar", function()
-	return Config.esp.health
-end, function(value)
-	Config.esp.health = value
-end)
-
-espRow.addToggle("Names", function()
-	return Config.esp.name
-end, function(value)
-	Config.esp.name = value
-end)
-
-espRow.addToggle("Distance", function()
-	return Config.esp.distance
-end, function(value)
-	Config.esp.distance = value
-end)
-
-espRow.addToggle("Tracers", function()
-	return Config.esp.tracer
-end, function(value)
-	Config.esp.tracer = value
-end)
-
-espRow.addToggle("Chams", function()
-	return Config.esp.chams
-end, function(value)
-	Config.esp.chams = value
-	if not value then
-		clearChams()
-	end
-end)
-
-espRow.addSlider("Max Distance", 50, 2000, 25, function()
-	return Config.esp.maxDist
-end, function(value)
-	Config.esp.maxDist = value
-end, " m", 0)
-
-espRow.addToggle("Team Check", function()
-	return Config.esp.team
-end, function(value)
-	Config.esp.team = value
-end)
-
-espRow.addToggle("Hide Knocked", function()
-	return Config.esp.hideKnocked
-end, function(value)
-	Config.esp.hideKnocked = value
-end)
-
-espRow.addToggle("Skeleton", function()
-	return Config.esp.skeleton
-end, function(value)
-	Config.esp.skeleton = value
-end)
-
-espRow.addToggle("Head Dot", function()
-	return Config.esp.headDot
-end, function(value)
-	Config.esp.headDot = value
-end)
-
-espRow.addToggle("Off-screen Arrows", function()
-	return Config.esp.arrows
-end, function(value)
-	Config.esp.arrows = value
-end)
-
-espRow.addToggle("Pickup ESP", function()
-	return Config.esp.pickups
-end, function(value)
-	Config.esp.pickups = value
-	if not value then
-		clearPickups()
-	end
-end)
-
-local skinRow = interfaceWindow.addRow("Skin Unlocker", {
-	get = function()
-		return Config.skin.enabled
-	end,
-	toggle = function()
-		Config.skin.enabled = not Config.skin.enabled
-		Skin.dirty = true
-	end,
-})
-
-skinRow.addToggle("Enabled", function()
-	return Config.skin.enabled
-end, function(value)
-	Config.skin.enabled = value
-	Skin.dirty = true
-end)
-
-skinRow.addDropdown("Skin", { "Cyan", "Gold", "Crimson", "Violet", "Emerald", "Ice", "Pink", "White" }, function()
-	return Config.skin.color
-end, function(value)
-	Config.skin.color = value
-	Skin.dirty = true
-end)
-
-skinRow.addToggle("Rainbow", function()
-	return Config.skin.rainbow
-end, function(value)
-	Config.skin.rainbow = value
-	Skin.dirty = true
-end)
-
-skinRow.addDropdown("Material", { "Neon", "ForceField", "Glass", "Metal", "SmoothPlastic", "Plastic" }, function()
-	return Config.skin.material
-end, function(value)
-	Config.skin.material = value
-	Skin.dirty = true
-end)
-
---------------------------------------------------------------------------
--- Movement panel
---------------------------------------------------------------------------
-
-local speedRow = moveWindow.addRow("Walk Speed", {
-	get = function()
-		return Config.move.speed
-	end,
-	toggle = function()
-		Config.move.speed = not Config.move.speed
-	end,
-})
-
-speedRow.addToggle("Enabled", function()
-	return Config.move.speed
-end, function(value)
-	Config.move.speed = value
-end)
-
-speedRow.addSlider("Speed", 16, 120, 1, function()
-	return Config.move.speedValue
-end, function(value)
-	Config.move.speedValue = value
-end, "", 0)
-
-local jumpRow = moveWindow.addRow("Jump", {
-	get = function()
-		return Config.move.jump
-	end,
-	toggle = function()
-		Config.move.jump = not Config.move.jump
-	end,
-})
-
-jumpRow.addToggle("Enabled", function()
-	return Config.move.jump
-end, function(value)
-	Config.move.jump = value
-end)
-
-jumpRow.addSlider("Power", 50, 250, 5, function()
-	return Config.move.jumpValue
-end, function(value)
-	Config.move.jumpValue = value
-end, "", 0)
-
-jumpRow.addToggle("Infinite Jump", function()
-	return Config.move.infiniteJump
-end, function(value)
-	Config.move.infiniteJump = value
-end)
-
-jumpRow.addToggle("Auto Jump", function()
-	return Config.move.autoJump
-end, function(value)
-	Config.move.autoJump = value
-end)
-
-local flyRow = moveWindow.addRow("Fly", {
-	get = function()
-		return Config.move.fly
-	end,
-	toggle = function()
-		Config.move.fly = not Config.move.fly
-		if not Config.move.fly then
-			stopFly()
-		end
-	end,
-})
-
-flyRow.addToggle("Enabled", function()
-	return Config.move.fly
-end, function(value)
-	Config.move.fly = value
-	if not value then
-		stopFly()
-	end
-end)
-
-flyRow.addSlider("Speed", 10, 300, 5, function()
-	return Config.move.flySpeed
-end, function(value)
-	Config.move.flySpeed = value
-end, "", 0)
-
-flyRow.addInfo("Space / LeftControl for up and down")
-
-local noclipRow = moveWindow.addRow("Noclip", {
-	get = function()
-		return Config.move.noclip
-	end,
-	toggle = function()
-		Config.move.noclip = not Config.move.noclip
-		if not Config.move.noclip then
-			restoreNoclip()
-		end
-	end,
-})
-
-noclipRow.addToggle("Enabled", function()
-	return Config.move.noclip
-end, function(value)
-	Config.move.noclip = value
-	if not value then
-		restoreNoclip()
-	end
-end)
-
-local cameraRow = moveWindow.addRow("Camera FOV", {
-	get = function()
-		return Config.move.fov
-	end,
-	toggle = function()
-		Config.move.fov = not Config.move.fov
-	end,
-})
-
-cameraRow.addToggle("Enabled", function()
-	return Config.move.fov
-end, function(value)
-	Config.move.fov = value
-end)
-
-cameraRow.addSlider("FOV", 30, 120, 1, function()
-	return Config.move.fovValue
-end, function(value)
-	Config.move.fovValue = value
-end, " deg", 0)
-
---------------------------------------------------------------------------
--- Extra interface rows
---------------------------------------------------------------------------
-
-local worldRow = interfaceWindow.addRow("World Visuals", {
-	get = function()
-		return Config.visual.fullbright
-	end,
-	toggle = function()
-		Config.visual.fullbright = not Config.visual.fullbright
-	end,
-})
-
-worldRow.addToggle("Fullbright", function()
-	return Config.visual.fullbright
-end, function(value)
-	Config.visual.fullbright = value
-end)
-
-worldRow.addToggle("No Fog", function()
-	return Config.visual.noFog
-end, function(value)
-	Config.visual.noFog = value
-end)
-
-local crosshairRow = interfaceWindow.addRow("Crosshair", {
-	get = function()
-		return Config.visual.crosshair
-	end,
-	toggle = function()
-		Config.visual.crosshair = not Config.visual.crosshair
-	end,
-})
-
-crosshairRow.addToggle("Custom Crosshair", function()
-	return Config.visual.crosshair
-end, function(value)
-	Config.visual.crosshair = value
-end)
-
-crosshairRow.addSlider("Length", 2, 24, 1, function()
-	return Config.visual.crosshairSize
-end, function(value)
-	Config.visual.crosshairSize = value
-end, " px", 0)
-
-local hudRow = interfaceWindow.addRow("HUD", {
-	get = function()
-		return Config.visual.watermark
-	end,
-	toggle = function()
-		Config.visual.watermark = not Config.visual.watermark
-	end,
-})
-
-hudRow.addToggle("Watermark", function()
-	return Config.visual.watermark
-end, function(value)
-	Config.visual.watermark = value
-end)
-
-hudRow.addToggle("Clock", function()
-	return Config.visual.clock
-end, function(value)
-	Config.visual.clock = value
-end)
-
-hudRow.addToggle("Player Count", function()
-	return Config.visual.playerCount
-end, function(value)
-	Config.visual.playerCount = value
-end)
+notify = toast
 
 local pendingDestroy
 local function unloadClient()
@@ -3057,49 +2297,594 @@ local function unloadClient()
 end
 
 --------------------------------------------------------------------------
--- Interface panel
+-- Pages
 --------------------------------------------------------------------------
 
-local interfaceRow = interfaceWindow.addRow("Interface", {})
+local mainPage = makePage("main")
+local aimPage = makePage("aim")
+local espPage = makePage("esp")
+local miscPage = makePage("misc")
+local skinsPage = makePage("skins")
+local configPage = makePage("config")
 
-interfaceRow.addButton("Hide UI", function()
-	UI.setVisible(false)
-	toast("Tap the ninja icon to return")
+-- Main ----------------------------------------------------------------
+
+local mainCols = pageColumns(mainPage, 3)
+
+local quickRows = addSection(mainCols[1], "features")
+addCheck(quickRows, "aimbot", function()
+	return Config.aimbot.enabled
+end, function(value)
+	Config.aimbot.enabled = value
+end)
+addCheck(quickRows, "ragebot", function()
+	return Config.rage.enabled
+end, function(value)
+	Config.rage.enabled = value
+	if not value then
+		Rage.player = nil
+	end
+end)
+addCheck(quickRows, "triggerbot", function()
+	return Config.trigger.enabled
+end, function(value)
+	Config.trigger.enabled = value
+end)
+addCheck(quickRows, "esp", function()
+	return Config.esp.enabled
+end, function(value)
+	Config.esp.enabled = value
+end)
+addCheck(quickRows, "skin unlocker", function()
+	return Config.skin.enabled
+end, function(value)
+	Config.skin.enabled = value
+	Skin.dirty = true
+end)
+addCheck(quickRows, "fly", function()
+	return Config.move.fly
+end, function(value)
+	Config.move.fly = value
+	if not value then
+		stopFly()
+	end
+end)
+addCheck(quickRows, "noclip", function()
+	return Config.move.noclip
+end, function(value)
+	Config.move.noclip = value
+	if not value then
+		restoreNoclip()
+	end
+end)
+addCheck(quickRows, "walk speed", function()
+	return Config.move.speed
+end, function(value)
+	Config.move.speed = value
 end)
 
-interfaceRow.addButton("Unload Client", function()
+local rageRows = addSection(mainCols[2], "rage")
+addCheck(rageRows, "enabled", function()
+	return Config.rage.enabled
+end, function(value)
+	Config.rage.enabled = value
+	if not value then
+		Rage.player = nil
+	end
+end)
+addSlider(rageRows, "fov", 10, 180, 1, function()
+	return Config.rage.fov
+end, function(value)
+	Config.rage.fov = value
+end, " deg", 0)
+addSelect(rageRows, "target", { "Head", "Body", "Nearest" }, function()
+	return Config.rage.part
+end, function(value)
+	Config.rage.part = value
+end)
+addSlider(rageRows, "prediction", 0, 25, 1, function()
+	return Config.rage.prediction
+end, function(value)
+	Config.rage.prediction = value
+end, "%", 0)
+addCheck(rageRows, "wall check", function()
+	return Config.rage.wall
+end, function(value)
+	Config.rage.wall = value
+end)
+addCheck(rageRows, "team check", function()
+	return Config.rage.team
+end, function(value)
+	Config.rage.team = value
+end)
+addCheck(rageRows, "sticky", function()
+	return Config.rage.sticky
+end, function(value)
+	Config.rage.sticky = value
+end)
+addCheck(rageRows, "auto fire", function()
+	return Config.rage.autoFire
+end, function(value)
+	Config.rage.autoFire = value
+end)
+
+local targetRows = addSection(mainCols[3], "targeting & priority")
+addSelect(targetRows, "mode", { "Always", "Hold RMB", "Hold Q" }, function()
+	return Config.aimbot.mode
+end, function(value)
+	Config.aimbot.mode = value
+end)
+addSelect(targetRows, "target", { "Head", "Body", "Nearest" }, function()
+	return Config.aimbot.part
+end, function(value)
+	Config.aimbot.part = value
+end)
+addCheck(targetRows, "wall check", function()
+	return Config.aimbot.wall
+end, function(value)
+	Config.aimbot.wall = value
+	Aim.cache = {}
+end)
+addCheck(targetRows, "team check", function()
+	return Config.aimbot.team
+end, function(value)
+	Config.aimbot.team = value
+end)
+addCheck(targetRows, "sticky", function()
+	return Config.aimbot.sticky
+end, function(value)
+	Config.aimbot.sticky = value
+end)
+addCheck(targetRows, "instant lock", function()
+	return Config.aimbot.instant
+end, function(value)
+	Config.aimbot.instant = value
+end)
+addCheck(targetRows, "1st person", function()
+	return Config.aimbot.firstPerson
+end, function(value)
+	Config.aimbot.firstPerson = value
+end)
+addCheck(targetRows, "auto fire", function()
+	return Config.aimbot.autoFire
+end, function(value)
+	Config.aimbot.autoFire = value
+end)
+
+-- Aim -----------------------------------------------------------------
+
+local aimCols = pageColumns(aimPage, 3)
+
+local aimRows = addSection(aimCols[1], "aimbot")
+addCheck(aimRows, "enabled", function()
+	return Config.aimbot.enabled
+end, function(value)
+	Config.aimbot.enabled = value
+end)
+addSlider(aimRows, "fov", 10, 180, 1, function()
+	return Config.aimbot.fov
+end, function(value)
+	Config.aimbot.fov = value
+end, " deg", 0)
+addSlider(aimRows, "smoothness", 1, 40, 0.5, function()
+	return Config.aimbot.smooth
+end, function(value)
+	Config.aimbot.smooth = value
+end, "", 1)
+addSlider(aimRows, "max turn", 60, 720, 10, function()
+	return Config.aimbot.turn
+end, function(value)
+	Config.aimbot.turn = value
+end, " d/s", 0)
+addSlider(aimRows, "prediction", 0, 20, 1, function()
+	return Config.aimbot.prediction
+end, function(value)
+	Config.aimbot.prediction = value
+end, "%", 0)
+addSlider(aimRows, "jitter filter", 0, 200, 5, function()
+	return Config.aimbot.jitter
+end, function(value)
+	Config.aimbot.jitter = value
+end, " ms", 0)
+addSlider(aimRows, "deadzone", 0, 20, 1, function()
+	return Config.aimbot.deadzone
+end, function(value)
+	Config.aimbot.deadzone = value
+end, " px", 0)
+addSelect(aimRows, "target part", { "Head", "Body", "Nearest" }, function()
+	return Config.aimbot.part
+end, function(value)
+	Config.aimbot.part = value
+end)
+addCheck(aimRows, "auto fire", function()
+	return Config.aimbot.autoFire
+end, function(value)
+	Config.aimbot.autoFire = value
+end)
+addCheck(aimRows, "auto scope", function()
+	return Config.aimbot.autoScope
+end, function(value)
+	Config.aimbot.autoScope = value
+	if not value then
+		applyScope(false)
+	end
+end)
+addCheck(aimRows, "hit marker", function()
+	return Config.aimbot.hitMarker
+end, function(value)
+	Config.aimbot.hitMarker = value
+end)
+addCheck(aimRows, "kill notify", function()
+	return Config.aimbot.killNotify
+end, function(value)
+	Config.aimbot.killNotify = value
+end)
+addCheck(aimRows, "target hud", function()
+	return Config.aimbot.targetHud
+end, function(value)
+	Config.aimbot.targetHud = value
+end)
+addCheck(aimRows, "fov circle", function()
+	return Config.aimbot.showFov
+end, function(value)
+	Config.aimbot.showFov = value
+end)
+
+local aimRage = addSection(aimCols[2], "ragebot")
+addCheck(aimRage, "enabled", function()
+	return Config.rage.enabled
+end, function(value)
+	Config.rage.enabled = value
+	if not value then
+		Rage.player = nil
+	end
+end)
+addSlider(aimRage, "fov", 10, 180, 1, function()
+	return Config.rage.fov
+end, function(value)
+	Config.rage.fov = value
+end, " deg", 0)
+addSelect(aimRage, "target", { "Head", "Body", "Nearest" }, function()
+	return Config.rage.part
+end, function(value)
+	Config.rage.part = value
+end)
+addSlider(aimRage, "prediction", 0, 25, 1, function()
+	return Config.rage.prediction
+end, function(value)
+	Config.rage.prediction = value
+end, "%", 0)
+addCheck(aimRage, "wall check", function()
+	return Config.rage.wall
+end, function(value)
+	Config.rage.wall = value
+end)
+addCheck(aimRage, "team check", function()
+	return Config.rage.team
+end, function(value)
+	Config.rage.team = value
+end)
+addCheck(aimRage, "sticky", function()
+	return Config.rage.sticky
+end, function(value)
+	Config.rage.sticky = value
+end)
+addCheck(aimRage, "auto fire", function()
+	return Config.rage.autoFire
+end, function(value)
+	Config.rage.autoFire = value
+end)
+
+local aimTrigger = addSection(aimCols[3], "triggerbot")
+addCheck(aimTrigger, "enabled", function()
+	return Config.trigger.enabled
+end, function(value)
+	Config.trigger.enabled = value
+end)
+addSlider(aimTrigger, "range", 20, 1000, 10, function()
+	return Config.trigger.range
+end, function(value)
+	Config.trigger.range = value
+end, " m", 0)
+addSlider(aimTrigger, "delay", 0, 500, 10, function()
+	return Config.trigger.delay
+end, function(value)
+	Config.trigger.delay = value
+end, " ms", 0)
+addCheck(aimTrigger, "team check", function()
+	return Config.trigger.team
+end, function(value)
+	Config.trigger.team = value
+end)
+
+-- ESP -----------------------------------------------------------------
+
+local espCols = pageColumns(espPage, 3)
+
+local visuals = addSection(espCols[1], "visuals")
+addCheck(visuals, "esp", function()
+	return Config.esp.enabled
+end, function(value)
+	Config.esp.enabled = value
+end)
+addCheck(visuals, "boxes", function()
+	return Config.esp.box
+end, function(value)
+	Config.esp.box = value
+end)
+addCheck(visuals, "box fill", function()
+	return Config.esp.fill
+end, function(value)
+	Config.esp.fill = value
+end)
+addCheck(visuals, "health bar", function()
+	return Config.esp.health
+end, function(value)
+	Config.esp.health = value
+end)
+addCheck(visuals, "names", function()
+	return Config.esp.name
+end, function(value)
+	Config.esp.name = value
+end)
+addCheck(visuals, "distance", function()
+	return Config.esp.distance
+end, function(value)
+	Config.esp.distance = value
+end)
+addCheck(visuals, "tracers", function()
+	return Config.esp.tracer
+end, function(value)
+	Config.esp.tracer = value
+end)
+addCheck(visuals, "chams", function()
+	return Config.esp.chams
+end, function(value)
+	Config.esp.chams = value
+	if not value then
+		clearChams()
+	end
+end)
+addCheck(visuals, "skeleton", function()
+	return Config.esp.skeleton
+end, function(value)
+	Config.esp.skeleton = value
+end)
+addCheck(visuals, "head dot", function()
+	return Config.esp.headDot
+end, function(value)
+	Config.esp.headDot = value
+end)
+
+local filters = addSection(espCols[2], "filters")
+addCheck(filters, "off-screen arrows", function()
+	return Config.esp.arrows
+end, function(value)
+	Config.esp.arrows = value
+end)
+addCheck(filters, "pickup esp", function()
+	return Config.esp.pickups
+end, function(value)
+	Config.esp.pickups = value
+	if not value then
+		clearPickups()
+	end
+end)
+addCheck(filters, "team check", function()
+	return Config.esp.team
+end, function(value)
+	Config.esp.team = value
+end)
+addCheck(filters, "hide knocked", function()
+	return Config.esp.hideKnocked
+end, function(value)
+	Config.esp.hideKnocked = value
+end)
+addSlider(filters, "max distance", 50, 2000, 25, function()
+	return Config.esp.maxDist
+end, function(value)
+	Config.esp.maxDist = value
+end, " m", 0)
+
+local world = addSection(espCols[3], "world")
+addCheck(world, "fullbright", function()
+	return Config.visual.fullbright
+end, function(value)
+	Config.visual.fullbright = value
+end)
+addCheck(world, "no fog", function()
+	return Config.visual.noFog
+end, function(value)
+	Config.visual.noFog = value
+end)
+addCheck(world, "custom crosshair", function()
+	return Config.visual.crosshair
+end, function(value)
+	Config.visual.crosshair = value
+end)
+addSlider(world, "crosshair length", 2, 24, 1, function()
+	return Config.visual.crosshairSize
+end, function(value)
+	Config.visual.crosshairSize = value
+end, " px", 0)
+addCheck(world, "watermark", function()
+	return Config.visual.watermark
+end, function(value)
+	Config.visual.watermark = value
+end)
+addCheck(world, "clock", function()
+	return Config.visual.clock
+end, function(value)
+	Config.visual.clock = value
+end)
+addCheck(world, "player count", function()
+	return Config.visual.playerCount
+end, function(value)
+	Config.visual.playerCount = value
+end)
+
+-- Misc ----------------------------------------------------------------
+
+local miscCols = pageColumns(miscPage, 2)
+
+local movement = addSection(miscCols[1], "movement")
+addCheck(movement, "walk speed", function()
+	return Config.move.speed
+end, function(value)
+	Config.move.speed = value
+end)
+addSlider(movement, "speed", 16, 120, 1, function()
+	return Config.move.speedValue
+end, function(value)
+	Config.move.speedValue = value
+end, "", 0)
+addCheck(movement, "jump power", function()
+	return Config.move.jump
+end, function(value)
+	Config.move.jump = value
+end)
+addSlider(movement, "jump", 50, 250, 5, function()
+	return Config.move.jumpValue
+end, function(value)
+	Config.move.jumpValue = value
+end, "", 0)
+addCheck(movement, "infinite jump", function()
+	return Config.move.infiniteJump
+end, function(value)
+	Config.move.infiniteJump = value
+end)
+addCheck(movement, "auto jump", function()
+	return Config.move.autoJump
+end, function(value)
+	Config.move.autoJump = value
+end)
+addCheck(movement, "fly", function()
+	return Config.move.fly
+end, function(value)
+	Config.move.fly = value
+	if not value then
+		stopFly()
+	end
+end)
+addSlider(movement, "fly speed", 10, 300, 5, function()
+	return Config.move.flySpeed
+end, function(value)
+	Config.move.flySpeed = value
+end, "", 0)
+addCheck(movement, "noclip", function()
+	return Config.move.noclip
+end, function(value)
+	Config.move.noclip = value
+	if not value then
+		restoreNoclip()
+	end
+end)
+
+local camera = addSection(miscCols[2], "camera & hud")
+addCheck(camera, "camera fov", function()
+	return Config.move.fov
+end, function(value)
+	Config.move.fov = value
+end)
+addSlider(camera, "fov", 30, 120, 1, function()
+	return Config.move.fovValue
+end, function(value)
+	Config.move.fovValue = value
+end, " deg", 0)
+addInfo(camera, "space / leftctrl = fly up / down")
+addInfo(camera, "insert = hide ui")
+addInfo(camera, "rightshift = unload")
+
+-- Skins ---------------------------------------------------------------
+
+local skinCols = pageColumns(skinsPage, 2)
+
+local skinRows = addSection(skinCols[1], "skin unlocker")
+addCheck(skinRows, "enabled", function()
+	return Config.skin.enabled
+end, function(value)
+	Config.skin.enabled = value
+	Skin.dirty = true
+end)
+addSelect(skinRows, "skin", { "Cyan", "Gold", "Crimson", "Violet", "Emerald", "Ice", "Pink", "White" }, function()
+	return Config.skin.color
+end, function(value)
+	Config.skin.color = value
+	Skin.dirty = true
+end)
+addCheck(skinRows, "rainbow", function()
+	return Config.skin.rainbow
+end, function(value)
+	Config.skin.rainbow = value
+	Skin.dirty = true
+end)
+addSelect(skinRows, "material", { "Neon", "ForceField", "Glass", "Metal", "SmoothPlastic", "Plastic" }, function()
+	return Config.skin.material
+end, function(value)
+	Config.skin.material = value
+	Skin.dirty = true
+end)
+addInfo(skinRows, "client-side only - not real skins")
+
+local session = addSection(skinCols[2], "interface")
+addAction(session, "hide ui", function()
+	UI.setVisible(false)
+	toast("hilix hidden - tap H")
+end)
+addAction(session, "unload client", function()
 	unloadClient()
 end)
+addInfo(session, "tap hilix.gg in the top bar")
+addInfo(session, "to drag the window")
 
-interfaceRow.addInfo("Insert - show or hide UI")
-interfaceRow.addInfo("RightShift - unload")
-interfaceRow.addInfo("Tap a name to toggle it")
-interfaceRow.addInfo("Tap + for settings")
-interfaceRow.addInfo("v1.1.0 - 45+ features")
+-- Configs -------------------------------------------------------------
+
+local configCols = pageColumns(configPage, 2)
+
+local about = addSection(configCols[1], "hilix")
+addInfo(about, "hilix.gg - rivals")
+addInfo(about, "60+ features")
+addInfo(about, "for delta / mobile")
+addInfo(about, "v1.2.0")
+addAction(about, "copy loadstring", function()
+	local url = "https://raw.githubusercontent.com/njjjjjhij/rivals-ninja/main/RivalsClient.lua"
+	pcall(function()
+		setclipboard("loadstring(game:HttpGet(\"" .. url .. "\"))()")
+	end)
+	toast("loadstring copied")
+end)
+
+local keys = addSection(configCols[2], "keys")
+addInfo(keys, "insert - show / hide ui")
+addInfo(keys, "rightshift - unload")
+addInfo(keys, "tap h icon - show / hide ui")
+addInfo(keys, "tap a row - toggle feature")
+addInfo(keys, "tap a value - cycle option")
+addInfo(keys, "drag a bar - change value")
 
 --------------------------------------------------------------------------
--- Floating ninja icon
+-- Floating icon
 --------------------------------------------------------------------------
 
 local startSize = viewport()
-local iconX = math.max(math.floor(startSize.X / SCALE - 60), 8)
+local iconX = math.max(math.floor(startSize.X / SCALE - px(66)), px(8))
 local iconY = math.floor(startSize.Y / SCALE * 0.42)
 local icon = create("TextButton", {
-	Name = "NinjaIcon",
+	Name = "HilixIcon",
 	AutoButtonColor = false,
-	BackgroundColor3 = Theme.panel,
+	BackgroundColor3 = Color3.fromRGB(10, 10, 12),
 	BackgroundTransparency = 0.02,
 	BorderSizePixel = 0,
 	Font = Enum.Font.GothamBlack,
-	Text = "N",
-	TextSize = px(28),
-	TextColor3 = Theme.accent,
+	Text = "H",
+	TextSize = px(26),
+	TextColor3 = HX.text,
 	Position = UDim2.fromOffset(px(iconX), px(iconY)),
-	Size = UDim2.fromOffset(px(52), px(52)),
+	Size = UDim2.fromOffset(px(50), px(50)),
 }, iconGui)
 create("UICorner", { CornerRadius = UDim.new(1, 0) }, icon)
 create("UIStroke", {
-	Color = Theme.accent,
+	Color = HX.accent,
 	Thickness = px(2),
 	Transparency = 0.05,
 }, icon)
@@ -3109,9 +2894,9 @@ bindDrag(icon, function()
 	icon.baseY = iconY
 end, function(delta)
 	local size = viewport()
-	local maxX = math.max(size.X / SCALE - 52, 0)
+	local maxX = math.max(size.X / SCALE - 50, 0)
 	iconX = math.clamp(icon.baseX + delta.X / SCALE, 0, maxX)
-	iconY = math.clamp(icon.baseY + delta.Y / SCALE, 0, math.max(size.Y / SCALE - 52, 0))
+	iconY = math.clamp(icon.baseY + delta.Y / SCALE, 0, math.max(size.Y / SCALE - 50, 0))
 	if iconX > maxX - 18 then
 		iconX = maxX
 	elseif iconX < 18 then
@@ -3121,6 +2906,50 @@ end, function(delta)
 end, function()
 	UI.setVisible(not UI.visible)
 end)
+
+--------------------------------------------------------------------------
+-- HUD
+--------------------------------------------------------------------------
+
+local coordsLabel = create("TextLabel", {
+	BackgroundTransparency = 1,
+	AnchorPoint = Vector2.new(0, 1),
+	Position = UDim2.new(0, px(12), 1, -px(10)),
+	Size = UDim2.fromOffset(px(170), px(46)),
+	Font = Enum.Font.Code,
+	Text = "X  --\nY  --\nZ  --",
+	TextSize = px(10),
+	TextColor3 = HX.text,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Bottom,
+	TextStrokeTransparency = 0.5,
+}, root)
+
+local statsLabel = create("TextLabel", {
+	BackgroundTransparency = 1,
+	AnchorPoint = Vector2.new(1, 1),
+	Position = UDim2.new(1, -px(12), 1, -px(10)),
+	Size = UDim2.fromOffset(px(190), px(80)),
+	Font = Enum.Font.Code,
+	Text = "FPS: --\nPing: -- ms\nTarget: -",
+	TextSize = px(10),
+	TextColor3 = HX.text,
+	TextXAlignment = Enum.TextXAlignment.Right,
+	TextYAlignment = Enum.TextYAlignment.Bottom,
+	TextStrokeTransparency = 0.5,
+}, root)
+
+local watermarkLabel = create("TextLabel", {
+	BackgroundTransparency = 1,
+	Position = UDim2.fromOffset(px(12), px(14)),
+	Size = UDim2.fromOffset(px(300), px(14)),
+	Font = Enum.Font.Code,
+	Text = "",
+	TextSize = px(9),
+	TextColor3 = HX.dim,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextStrokeTransparency = 0.55,
+}, root)
 
 --------------------------------------------------------------------------
 -- Render loop
@@ -3141,9 +2970,9 @@ local function updateFovCircle()
 	local size = camera.ViewportSize
 	fovCircle.Position = Vector2.new(size.X * 0.5, size.Y * 0.5)
 	fovCircle.Radius = screenRadius(camera, settings.fov)
-	fovCircle.Color = Theme.accent
+	fovCircle.Color = HX.accent
 	fovCircle.Thickness = 1
-	fovCircle.Transparency = 0.65
+	fovCircle.Transparency = 0.6
 	fovCircle.NumSides = 72
 	fovCircle.Filled = false
 	fovCircle.Visible = true
@@ -3164,15 +2993,15 @@ local function updateHud(delta)
 	end
 
 	hudClock = hudClock + delta
-	if hudClock < 0.2 then
+	if hudClock < 0.25 then
 		return
 	end
 	hudClock = 0
 
 	local character = LocalPlayer.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if root then
-		local position = root.Position
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	if rootPart then
+		local position = rootPart.Position
 		coordsLabel.Text = string.format("X  %.1f\nY  %.1f\nZ  %.1f", position.X, position.Y, position.Z)
 	else
 		coordsLabel.Text = "X  --\nY  --\nZ  --"
@@ -3187,7 +3016,7 @@ local function updateHud(delta)
 	if tracked then
 		targetName = tracked.Name
 	end
-	local lines = { string.format("FPS: %d", fpsValue), string.format("Ping: %d ms", ping) }
+	local lines = { "FPS: " .. tostring(fpsValue), "Ping: " .. tostring(ping) .. " ms" }
 	if Config.visual.clock then
 		local ok, stamp = pcall(function()
 			return os.date("%H:%M")
@@ -3199,9 +3028,10 @@ local function updateHud(delta)
 	end
 	lines[#lines + 1] = "Target: " .. targetName
 	statsLabel.Text = table.concat(lines, "\n")
+
 	watermarkLabel.Visible = Config.visual.watermark and true or false
 	if Config.visual.watermark then
-		watermarkLabel.Text = string.format("ninja / rivals  |  %d fps  |  %d ms  |  %d online", fpsValue, ping, #Players:GetPlayers())
+		watermarkLabel.Text = string.format("hilix.gg  |  %d fps  |  %d ms  |  %d online", fpsValue, ping, #Players:GetPlayers())
 	end
 end
 
@@ -3239,7 +3069,7 @@ local function onRender(delta)
 	updateHud(delta)
 end
 
-RunService:BindToRenderStep("NinjaRivals", Enum.RenderPriority.Camera.Value + 20, onRender)
+RunService:BindToRenderStep("HilixRender", Enum.RenderPriority.Camera.Value + 20, onRender)
 
 local lateConnections = {}
 local preRenderOk = pcall(function()
@@ -3288,7 +3118,7 @@ table.insert(inputConnections, Players.PlayerRemoving:Connect(function(player)
 end))
 
 pendingDestroy = function()
-	RunService:UnbindFromRenderStep("NinjaRivals")
+	RunService:UnbindFromRenderStep("HilixRender")
 	for _, connection in ipairs(inputConnections) do
 		pcall(function()
 			connection:Disconnect()
@@ -3335,14 +3165,14 @@ pendingDestroy = function()
 	if iconGui then
 		iconGui:Destroy()
 	end
-	if _G.NinjaRivals then
-		_G.NinjaRivals = nil
+	if _G.HilixRivals then
+		_G.HilixRivals = nil
 	end
 	pendingDestroy = nil
 end
 
-_G.NinjaRivals = {
-	version = "1.1.0",
+_G.HilixRivals = {
+	version = "1.2.0",
 	config = Config,
 	destroy = function()
 		if pendingDestroy then
@@ -3351,11 +3181,12 @@ _G.NinjaRivals = {
 	end,
 }
 
+showPage("main")
 UI.sync()
-toast("Ninja loaded - tap the icon to hide")
+toast("hilix cheats loaded")
 
 if not DRAW_OK then
-	toast("Drawing API missing - ESP disabled")
+	toast("drawing api missing - esp disabled")
 	Config.esp.enabled = false
 	UI.sync()
 end
