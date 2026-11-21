@@ -1,43 +1,27 @@
 # Hilix / Rivals
 
-A single-file, mobile-first cheat client for **Roblox Rivals**, built for Delta and other executors. The menu is a single dark Sleepy.gg-style panel: red `hilix.gg` wordmark, top tabs, left nav, and compact checkbox columns. A round **H** icon on the right edge closes the UI.
-
-Feature set is inspired by the public Kiciahook / Duck Hub Rivals scripts. All code is written from scratch - none is copied from Sleepy.gg or Kiciahook.
+A single-file, mobile-first cheat client for **Roblox Rivals**, built for Delta and other executors. The menu is one dark Sleepy.gg-style panel with a red `hilix.gg` wordmark, top tabs, a left module rail, and compact checkbox columns.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/njjjjjhij/rivals-ninja/main/RivalsClient.lua"))()
 ```
 
-## Menu
+## Modules
 
-- Single translucent panel with `hilix.gg` branding and red accents
-- Top tabs: rage / visuals / misc / skins / settings
-- Left nav: main / aim / esp / misc / skins / configs
-- Compact checkbox rows, inline value boxes and slim sliders
-- Draggable header, `x` closes the menu, round **H** side icon reopens it
+Every module is its own page and tab — nothing is bundled into one mixed list.
 
-## Features (60+)
+- **Aim** — sticky aimbot, FOV up to 360°, smoothness, max turn, prediction, jitter filter, deadzone, curve (exponential / linear / spring), priority (crosshair / distance / low HP), head-body-nearest, aim height offset, lock delay, switch delay, max distance, wall and team checks, ignore knocked, auto fire with delay, auto scope, instant lock, first person, FOV circle, lock line, target dot, hit marker, kill notify, target HUD.
+- **Rage** — 360° FOV snap, instant or smooth snap, sticky target, switch delay, fire rate, auto fire, auto scope, prediction, max distance, wall / team / knocked filters.
+- **Trigger** — crosshair ray or FOV mode, FOV size, range, max distance, delay, hit chance, burst shots, wall / team / knocked filters.
+- **ESP** — boxes or corner boxes, fill, health bar and health text, names (display name / username / both), distance, text size, opacity, tracers with bottom or center origin, team colors, chams with adjustable fill, R15/R6 skeleton with bone thickness, head dots, off-screen arrows with size, pickup ESP, distance limit and filters.
+- **Radar** — rotating minimap with range, size, opacity, dot size and optional names.
+- **Logs** — hit log, kill feed, fade duration, line limit, clear button.
+- **Movement** — walk speed, jump power, infinite jump, auto jump, fly with camera or horizontal mode and speed, noclip, camera FOV, camera distance, hip height, gravity.
+- **Visuals** — fullbright, no fog, disabled lighting effects, custom time and brightness, crosshair style (cross / dot / circle) with gap, thickness and length, coords, watermark, clock, player count, UI scale, panel fade and icon size.
+- **Skins** — client-side viewmodel/tool repaint with 8 colors, rainbow speed, 6 materials, restores on disable.
+- **Config** — loadstring copy, module panic button, key reference, version.
 
-### Aimbot
-Aimbot, activation modes, FOV circle and slider, smoothness, max turn, deadzone, Head/Body/Nearest, prediction, jitter filter, instant lock, first-person lock, wall check, team check, sticky target, auto fire, auto scope, hit marker, kill notifier, target HUD.
-
-### Ragebot
-Instant snap, auto fire, FOV, target part, prediction, wall check, team check, sticky target.
-
-### Triggerbot
-Range, delay, team check, raycast with VirtualUser / VirtualInputManager fallbacks.
-
-### ESP
-Boxes, fill, health bars, names, distance, tracers, chams, R15/R6 skeleton, head dots, off-screen arrows, pickup ESP, max distance, team check, hide knocked.
-
-### Movement
-Walk speed, jump power, infinite jump, auto jump, fly with speed, noclip, camera FOV.
-
-### Visuals & HUD
-Fullbright, no fog, custom crosshair, watermark, clock, player count, coordinates, FPS, ping, target readout.
-
-### Skin Unlocker (client-side)
-8 skin colors, rainbow mode, 6 materials, repaints tools and viewmodels and restores on disable.
+That is 149 toggles, sliders and option cyclers (156 controls including action buttons), every one wired to real client-side behavior.
 
 ## Controls
 
@@ -54,11 +38,11 @@ Fullbright, no fog, custom crosshair, watermark, clock, player count, coordinate
 
 ## Honest limits
 
-- Everything is **client-side**. The server still decides hit registration, ammo, movement correction and inventory.
+- Everything runs **client-side**. The server still decides hit registration, ammo, movement correction and inventory.
 - There is **no anti-cheat bypass**. Camera and input changes are detectable; use an alt.
-- The Skin Unlocker is a visual viewmodel skin applier, not a real inventory unlock.
+- The Skin Unlocker is a visual repaint, not an inventory unlock.
 - Silent aim, rapid fire, no-spread and no-recoil are not included because they cannot be done reliably client-side without game-specific remote hooks.
-- Speed, fly and noclip work locally and may be corrected by the server.
+- Speed, fly, gravity and noclip work locally and may be corrected by the server.
 
 ## Disclaimer
 

@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
       - name: Fetch RivalsClient.lua
         run: |
-          curl -fsSL "https://paste.rs/jaWEl" -o RivalsClient.lua
+          curl -fsSL "https://paste.rs/2zgy7" -o RivalsClient.lua
           test -s RivalsClient.lua
       - name: Commit client
         run: |
