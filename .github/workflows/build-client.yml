@@ -1,0 +1,35 @@
+name: build-client
+
+on:
+  push:
+    paths:
+      - ".build-trigger"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-client
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch RivalsClient.lua
+        run: |
+          curl -fsSL "https://paste.rs/8nni4" -o RivalsClient.lua
+          test -s RivalsClient.lua
+      - name: Commit client
+        run: |
+          git config user.name "ninja-bot"
+          git config user.email "ninja-bot@users.noreply.github.com"
+          git add RivalsClient.lua
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "Publish RivalsClient.lua"
+          git push
