@@ -1,5 +1,5 @@
--- Ninja / Rivals loader
--- Execute this in Delta (or any executor) to load the client from GitHub.
+-- Hilix / Rivals loader
+-- Execute this in Delta (or any executor) to load Hilix from GitHub.
 
 local SOURCE = "https://raw.githubusercontent.com/njjjjjhij/rivals-ninja/main/RivalsClient.lua"
 
@@ -13,5 +13,5 @@ local ok, result = pcall(function()
 end)
 
 if not ok then
-	warn("[Ninja] failed to load: " .. tostring(result))
+	warn("[Hilix] failed to load: " .. tostring(result))
 end
